@@ -4,12 +4,14 @@ import pickle
 import os.path
 import simplejson
 import csv
+import codecs
 import configparser
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from docopt import docopt
+from tqdm import tqdm
 
 __doc__ = """{f}
 
@@ -18,7 +20,7 @@ Usage:
     {f} create [<class_file>] [--dry-run]
     {f} enroll [<enroll_file>] [--dry-run]
     {f} remove <courses>... [--dry-run]
-    {f} lists
+    {f} lists <output_csv>
     {f} detail <course_id>
     {f} -h | --help
 
@@ -33,12 +35,13 @@ Options:
     -h --help   Show this screen and exit.
 """.format(f=__file__)
 
+
 def parseOptions():
     args = docopt(__doc__)
-    print("  {0:<20}{1:<20}{2:<20}".format("key", "value", "type"))
-    print("  {0:-<60}".format(""))
-    for k,v in args.items():
-       print("  {0:<20}{1:<20}{2:<20}".format(str(k), str(v), str(type(v))))
+#    print("  {0:<20}{1:<20}{2:<20}".format("key", "value", "type"))
+#    print("  {0:-<60}".format(""))
+#    for k,v in args.items():
+#       print("  {0:<20}{1:<20}{2:<20}".format(str(k), str(v), str(type(v))))
     options = {}
     if args['create']:
         execMode = 'create'
@@ -53,12 +56,13 @@ def parseOptions():
         options['courses'] = args['courses']
     elif args['lists']:
         execMode = 'lists'
+        options['output_csv'] = args['<output_csv>']
     elif args['detail']:
         execMode = 'datail'
         options['detailCourse'] = args['<course_id>']
     elif args['all']:
         execMode = 'default'
-    print(execMode)
+    # print(execMode)
     options['dry-run'] = True if args['--dry-run'] else False
     return execMode, options
 
@@ -72,8 +76,8 @@ def api_init_class():
     # cf. Authorize Request https://developers.google.com/classroom/guides/auth
     global serviceClassroom
     creds = None
-    # The file token.*.pickle stores the user's access and refresh tokens, and 
-    # is created automatically when the authorization flow completes for the 
+    # The file token.*.pickle stores the user's access and refresh tokens, and
+    # is created automatically when the authorization flow completes for the
     # first time.
     if os.path.exists('token.create_class.pickle'):
         with open('token.create_class.pickle', 'rb') as token:
@@ -181,7 +185,7 @@ def createClassroom(classSubject, classSections, classTeacher):
     print(u'Course created: {0} ({1})'.format(course.get('name'),
                                               courseId))
     enrollCode = course.get('enrollmentCode')  # EnrollmentCode
-    #if classTeacher != adminUser:
+    # if classTeacher != adminUser:
     #    addAdminUser(courseId)
     return courseId, enrollCode
 
@@ -242,6 +246,8 @@ def enrollStudent(courseId, studentId):
 #
 # enroll students to a classroom with no confirmation cannot execute
 # due to lack of authority for classroom API
+
+
 def enrollStudent2(courseId, studentId):
     student = {
         'userId': studentId
@@ -268,6 +274,32 @@ def enrollStudent2(courseId, studentId):
             raise
 
 
+def listClassroom():
+    results = serviceClassroom.courses().list(
+        pageSize=0, courseStates='ACTIVE').execute()
+    courses = results.get('courses', [])
+    if not courses:
+        print('No courses found')
+    else:
+        print('Courses:')
+        with open(options['output_csv'], 'w') as f:
+            writer = csv.writer(f, lineterminator='\n')
+            # csv indexes
+            writer.writerow(
+                ['courseName, courseSection, courseId, classCode, ownerId, teacherName'])
+            for course in tqdm(courses):
+                results = serviceEnrollment.courses().teachers().list(
+                    courseId=course.get('id')).execute()
+                teachers = results.get('teachers', [])
+                writer.writerow([course.get('name'), course.get('section'), course.get(
+                    'id'), course.get('enrollmentCode'), course.get('ownerId'), teachers[0]['profile']['name']['fullName']])
+                # print(u'{0}, {1}, {2}, {3}, {4}, {5}'.format(course.get('name'), course.get('section'), course.get(
+                #    'id'), course.get('enrollmentCode'), course.get('ownerId'), teachers[0]['profile']['name']['fullName']))
+            # print(teachers[0]['profile']['emailAddress'])
+            # for teacher in teachers:
+            #    print('teacher: {}'.format(teacher['profile'])) # .get('name').get('fullName')
+
+
 # main()
 courseIdFile = "coursesID.csv"
 
@@ -275,11 +307,11 @@ if __name__ == '__main__':
     global adminUser
     global options
     execMode, options = parseOptions()
-    print(execMode, options)
+    #print(execMode, options)
     # evaluate specified key of dict object
-    #if 'enrollFile' in options:
+    # if 'enrollFile' in options:
     #    print(options['enrollFile'])
-    #exit()
+    # exit()
     # load config.ini
     inifile = configparser.ConfigParser()
     inifile.read('./config.ini', 'UTF-8')
@@ -296,12 +328,14 @@ if __name__ == '__main__':
         target = classSubjects
     elif execMode == 'remove':
         for courseId in options['courses']:
-           deleteClassroom(courseId)
+            deleteClassroom(courseId)
         exit()
     elif execMode == 'lists':
-        print('sorry, to be implement..')
+        listClassroom()
+        exit()
     elif execMode == 'info':
-        print('sorry, to be implement..')
+        print('sorry, to be implemented..')
+        exit()
     else:
         target = courseLists
     for classCode in target.keys():
@@ -327,19 +361,17 @@ if __name__ == '__main__':
         #
         if execMode == 'enroll' or execMode == 'default':
             print('enrolling..')
-            # add adminUser while students are added to a class
+            # add adminUser while students are added to a course
             if classCode in enrollStudents:
                 if classTeacher != adminUser and not options['dry-run']:
                     addAdminUser(courseId)
-                #print(enrollStudents[classCode])
+                # print(enrollStudents[classCode])
                 for studentId in enrollStudents[classCode]:
                     studentEmail = studentEmails[studentId]
                     print(classCode, studentId, end="")
                     if not option['dry-run']:
                         enrollStudent(courseId, studentEmail)
                     # print(studentEmail, end="")
-                    # enrollStudent(courseId, studentEmail)
-                    # enrollStudent2(courseId, studentEmail)
                 if classTeacher != adminUser and not options['dry-run']:
                     deleteAdminUser(courseId)
     if not options['dry-run']:
