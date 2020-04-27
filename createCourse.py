@@ -4,7 +4,6 @@ import pickle
 import os.path
 import simplejson
 import csv
-import codecs
 import configparser
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -21,7 +20,7 @@ Usage:
     {f} enroll [<enroll_file>] [--dry-run]
     {f} remove <courses>... [--dry-run]
     {f} lists <output_csv>
-    {f} detail <course_id>
+    {f} info <course_id>
     {f} -h | --help
 
 Options:
@@ -30,7 +29,7 @@ Options:
     enroll      enroll students on courses (default: enrollments.csv).
     remove      remove courses from classroom(courseId1 courseId2 ... ).
     lists       lists of all courses.
-    detail      detail of course information.
+    info        information of course information.
 
     -h --help   Show this screen and exit.
 """.format(f=__file__)
@@ -57,9 +56,9 @@ def parseOptions():
     elif args['lists']:
         execMode = 'lists'
         options['output_csv'] = args['<output_csv>']
-    elif args['detail']:
-        execMode = 'datail'
-        options['detailCourse'] = args['<course_id>']
+    elif args['info']:
+        execMode = 'info'
+        options['courseId'] = args['<course_id>']
     elif args['all']:
         execMode = 'default'
     # print(execMode)
@@ -243,6 +242,28 @@ def enrollStudent(courseId, studentId):
         else:
             raise
 
+def enrollStudent3(courseId, studentIds):
+    student = []
+    for studentId in studentIds:
+        student.append({
+            'courseId': courseId,
+            'userId': studentId,
+            'role': 'STUDENT'
+        })
+    print(student)
+    try:
+        student = serviceEnrollment.invitations().create(
+            body=student).execute()
+        print('done')
+    except HttpError as e:
+        error = simplejson.loads(e.content).get('error')
+        if(error.get('code') == 409):
+            print('User {0} are already a member of this course.'.format(
+                student['userId']))
+        else:
+            raise
+
+
 #
 # enroll students to a classroom with no confirmation cannot execute
 # due to lack of authority for classroom API
@@ -276,7 +297,8 @@ def enrollStudent2(courseId, studentId):
 
 def listClassroom():
     results = serviceClassroom.courses().list(
-        pageSize=0, courseStates='ACTIVE').execute()
+        pageSize=0).execute()
+#        pageSize=0, courseStates='ACTIVE').execute()
     courses = results.get('courses', [])
     if not courses:
         print('No courses found')
@@ -286,18 +308,22 @@ def listClassroom():
             writer = csv.writer(f, lineterminator='\n')
             # csv indexes
             writer.writerow(
-                ['courseName, courseSection, courseId, classCode, ownerId, teacherName'])
+                ['courseName', 'courseSection', 'courseId', 'classCode', 'ownerId', 'teacherName', 'status'])
             for course in tqdm(courses):
                 results = serviceEnrollment.courses().teachers().list(
                     courseId=course.get('id')).execute()
                 teachers = results.get('teachers', [])
                 writer.writerow([course.get('name'), course.get('section'), course.get(
-                    'id'), course.get('enrollmentCode'), course.get('ownerId'), teachers[0]['profile']['name']['fullName']])
+                    'id'), course.get('enrollmentCode'), course.get('ownerId'), teachers[0]['profile']['name']['fullName'], course.get('courseState')])
                 # print(u'{0}, {1}, {2}, {3}, {4}, {5}'.format(course.get('name'), course.get('section'), course.get(
                 #    'id'), course.get('enrollmentCode'), course.get('ownerId'), teachers[0]['profile']['name']['fullName']))
             # print(teachers[0]['profile']['emailAddress'])
             # for teacher in teachers:
             #    print('teacher: {}'.format(teacher['profile'])) # .get('name').get('fullName')
+
+def infoClassroom(courseId):
+    results = serviceClassroom.courses().get(id=courseId).execute()
+    print(results)
 
 
 # main()
@@ -334,7 +360,8 @@ if __name__ == '__main__':
         listClassroom()
         exit()
     elif execMode == 'info':
-        print('sorry, to be implemented..')
+        print("course Information..")
+        infoClassroom(options['courseId'])
         exit()
     else:
         target = courseLists
@@ -365,13 +392,14 @@ if __name__ == '__main__':
             if classCode in enrollStudents:
                 if classTeacher != adminUser and not options['dry-run']:
                     addAdminUser(courseId)
+                enrollStudent3(courseId, enrollStudents[classCode])
                 # print(enrollStudents[classCode])
-                for studentId in enrollStudents[classCode]:
-                    studentEmail = studentEmails[studentId]
-                    print(classCode, studentId, end="")
-                    if not option['dry-run']:
-                        enrollStudent(courseId, studentEmail)
-                    # print(studentEmail, end="")
+                #for studentId in enrollStudents[classCode]:
+                #    studentEmail = studentEmails[studentId]
+                #    print(classCode, studentId, end="")
+                #    if not option['dry-run']:
+                #        enrollStudent(courseId, studentEmail)
+                #    # print(studentEmail, end="")
                 if classTeacher != adminUser and not options['dry-run']:
                     deleteAdminUser(courseId)
     if not options['dry-run']:

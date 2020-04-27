@@ -13,6 +13,29 @@ Google の API を使うためには GCP(Google Cloud Platform)上の 「IAM と
 IAM から上記の鍵ペアを含む credentials を json 形式でダウンロードし、credentials.json という名前で保存します。
 さらに、初回実行時には、このプログラムが利用する２つの権限レベル(Authorize Request)のための OAuth2 が要求され、認証情報がローカルに保存されます。
 
+使い方：
+'''
+Usage:
+    createCourse.py all [--dry-run]
+    createCourse.py create [<class_file>] [--dry-run]
+    createCourse.py enroll [<enroll_file>] [--dry-run]
+    createCourse.py remove <courses>... [--dry-run]
+    createCourse.py lists <output_csv>
+    createCourse.py info <course_id>
+    createCourse.py -h | --help
+
+Options:
+    all         create new courses and enroll students on the Google Classroom.
+    create      create only new courses (default: classes.csv).
+    enroll      enroll students on courses (default: enrollments.csv).
+    remove      remove courses from classroom(courseId1 courseId2 ... ).
+    lists       lists of all courses.
+    info        information of course information.
+
+    -h --help   Show this screen and exit.
+'''
+
+
 実際のプログラムの流れは以下のとおりです
 
 (1) ドメイン内の教員メールアドレスを所有者(Owner)にして、コース（授業クラス）を作ります。
