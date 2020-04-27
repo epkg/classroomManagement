@@ -60,11 +60,11 @@ Options:
 adminUser=administrator@ef.gh.com
 ```
 
-
-
 入力は履修登録システム等から出力できる授業一覧(classes.csv) と登録者一覧(enrollments.csv)、さらには学籍番号とメールアドレスを対応付ける(students.csv) を準備します。
 
-- classes.csv(例)
+以下、各 csv のサンプルです
+
+- classes.csv
 ```
 # 授業コード, 授業名, 教員ID, 授業補足, 教員名
 00000A000,卒業研究,1234567,(電気)(○○クラス), ○○ △△
