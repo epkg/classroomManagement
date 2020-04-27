@@ -5,13 +5,28 @@ Google Classroom 内にクラスを作成したりクラスに学生を追加す
 G Suite では Google Cloud Platform と呼ばれる基盤の上で動作していて、様々なアプリケーションに対してコマンドライン操作(GAM; Google Apps Manager) やプログラム(GAS; Google App Script や Python, Java ）などから普通はできない作業も含めて実行できてしまいます。
 
 Google Classroom は Google のポリシーもあり、教員（教師）が持つクラスは管理者でさえ GUI 上からは見ることが出来ません。
-このため、今回のオンライン授業の準備でどのくらいクラスが作られているのかさえ分かりません（酷いですよね）。
+このため、今回のオンライン授業の準備でどのくらいクラスが作られているのかさえ分かりません。
 そこで、Google Classroom API を使ってプログラム(今回は Python)で色々と操作していく方法を取りました。
 
-Google の API を使うためには GCP(Google Cloud Platform)上の 「IAM と管理」を使って API 利用のために Client Key(と Secret Key)を取得した上で OAuth2 によるユーザ認証を噛ませておきました。（詳細は https://developers.google.com/classroom を参照）
+Google の API を使うためには GCP(Google Cloud Platform)上の 「IAM と管理」を使って API 利用のために Client Key(と Secret Key)を取得した上で OAuth2 によるユーザ認証を噛ませておきました。（詳細は https://developers.google.com/classroom/quickstart/python を参照）
 
 IAM から上記の鍵ペアを含む credentials を json 形式でダウンロードし、credentials.json という名前で保存します。
-さらに、初回実行時には、このプログラムが利用する２つの権限レベル(Authorize Request)のための OAuth2 が要求され、認証情報がローカルに保存されます。
+さらに、初回実行時には、このプログラムが利用する２つの権限レベル(Authorize Request)のための OAuth2 が要求され、token情報(token.create_class.pickle / token.enroll.pickle)がローカルに保存されます。
+
+さらに Python3 系の環境下でライブラリを追加します
+
+```
+pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+pip install --upgrade simplejson docopt tqdm
+```
+
+以上を追加した上で
+
+```
+% python3 classroomCreate.py --help
+```
+
+とすれば以下のようなヘルプが見えるはずです。
 
 使い方：
 ```
@@ -37,6 +52,15 @@ Options:
 
 
 実際のプログラムを実行する流れは以下のとおりです
+まず、最初に管理者アカウントを記した config.ini を作成します
+
+- config.ini
+```
+[user]
+adminUser=administrator@ef.gh.com
+```
+
+
 
 入力は履修登録システム等から出力できる授業一覧(classes.csv) と登録者一覧(enrollments.csv)、さらには学籍番号とメールアドレスを対応付ける(students.csv) を準備します。
 
