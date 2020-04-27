@@ -242,6 +242,7 @@ def enrollStudent(courseId, studentId):
         else:
             raise
 
+
 def enrollStudent3(courseId, studentIds):
     student = []
     for studentId in studentIds:
@@ -321,6 +322,7 @@ def listClassroom():
             # for teacher in teachers:
             #    print('teacher: {}'.format(teacher['profile'])) # .get('name').get('fullName')
 
+
 def infoClassroom(courseId):
     results = serviceClassroom.courses().get(id=courseId).execute()
     print(results)
@@ -392,14 +394,13 @@ if __name__ == '__main__':
             if classCode in enrollStudents:
                 if classTeacher != adminUser and not options['dry-run']:
                     addAdminUser(courseId)
-                enrollStudent3(courseId, enrollStudents[classCode])
                 # print(enrollStudents[classCode])
-                #for studentId in enrollStudents[classCode]:
-                #    studentEmail = studentEmails[studentId]
-                #    print(classCode, studentId, end="")
-                #    if not option['dry-run']:
-                #        enrollStudent(courseId, studentEmail)
-                #    # print(studentEmail, end="")
+                for studentId in enrollStudents[classCode]:
+                    studentEmail = studentEmails[studentId]
+                    print(classCode, studentId, end="")
+                    if not option['dry-run']:
+                        enrollStudent(courseId, studentEmail)
+                    # print(studentEmail, end="")
                 if classTeacher != adminUser and not options['dry-run']:
                     deleteAdminUser(courseId)
     if not options['dry-run']:
