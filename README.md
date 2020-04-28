@@ -16,14 +16,14 @@ IAM から上記の鍵ペアを含む credentials を json 形式でダウンロ
 さらに Python3 系の環境下でライブラリを追加します
 
 ```
-pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
-pip install --upgrade simplejson docopt tqdm
+% pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib
+% pip install --upgrade simplejson docopt tqdm
 ```
 
 以上を追加した上で
 
 ```
-% python3 classroomCreate.py --help
+% python3 createCourse.py --help
 ```
 
 とすれば以下のようなヘルプが見えるはずです。
@@ -31,9 +31,9 @@ pip install --upgrade simplejson docopt tqdm
 使い方：
 ```
 Usage:
-    createCourse.py all [--dry-run]
+    createCourse.py all [--dry-run] [--foreign-domain]
     createCourse.py create [<class_file>] [--dry-run]
-    createCourse.py enroll [<enroll_file>] [--dry-run]
+    createCourse.py enroll [<enroll_file>] [--dry-run] [--teacher] [--foreign-domain]
     createCourse.py remove <courses>... [--dry-run]
     createCourse.py lists <output_csv>
     createCourse.py info <course_id>
@@ -43,6 +43,8 @@ Options:
     all         create new courses and enroll students on the Google Classroom.
     create      create only new courses (default: classes.csv).
     enroll      enroll students on courses (default: enrollments.csv).
+                --teacher: invite / enroll Teacher(default Student)
+                --foreign-domain: force invite mode
     remove      remove courses from classroom(courseId1 courseId2 ... ).
     lists       lists of all courses.
     info        information of course information.
@@ -83,26 +85,32 @@ adminUser=administrator@ef.gh.com
 12345678902,abcd@ef.gh.com
 ```
 
-classes.csv にある授業を Classroom 上で作成し、enrollments.csv にしたがって学生を登録する場合、上記ファイルを同一ディレクトリにおいた状態で
+全ての教員が学生が同一ドメイン内(例： xxxx@ef.gh.com)でアカウントを保有している場合において、classes.csv にある授業を Classroom 上で作成し、enrollments.csv にしたがって学生を登録する場合、上記ファイルを同じディレクトリにおいた状態で
 
 ```
-% python3 classroomCreate.py all
+% python3 createCourse.py all
 ```
 
 とすれば作成できます。作成されたコースの一覧は coursesID.csv というファイルに出力されます。
+もし、学生が別ドメイン(例： xxxx@ed.ef.gh.com)である場合、
+
+```
+% python3 createCourse.py all --foreign-domain
+```
+とすることで、教員が学生を招待することができます（同一ドメイン内であれば「招待」ではなく「登録」が可能です）
 
 この他にも授業クラス（コース）だけを作成したい場合は
 
 ```
-% python3 classroomCreate.py create [<class_file>]
+% python3 createCourse.py create [<class_file>]
 ```
 
 として、実行します(class_file は指定がなければ classes.csv を使用)。その後、履修名簿が確定したら
 
 ```
-% python3 classroomCreate.py enroll [<enroll_file>]
+% python3 createCourse.py enroll [<enroll_file>]
 ```
 
-として学生を投入します。ただし、現状、一人ずつ学生を追加する必要があるため、大量実行する場合、相当な時間(一人追加するのに約1秒程度)が掛かってしまいます。良い方法があれば・・
+として学生を投入します。ただし、現状、学生追加は一人ずつしかできないため、大量実行する場合、相当な時間(一人追加するのに約1秒程度)が掛かってしまいます。
 
-他にも、開講している全てのクラスを抽出する lists コマンド、特定のコースIDの情報を表示する info コマンド（こちらは仮実装）も使えます。
+他にも、指定したコースIDのクラスを削除する remove コマンド(現在のところ、削除確認がないので注意)、開講している全てのクラスを抽出する lists コマンド、特定のコースIDの情報を表示する info コマンド（こちらは仮実装）も使えます。
