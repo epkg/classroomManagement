@@ -12,6 +12,7 @@ from google.auth.transport.requests import Request
 #
 from docopt import docopt
 from tqdm import tqdm
+import istarmap # local function
 from multiprocessing import Pool
 
 __doc__ = """{f}
@@ -307,22 +308,34 @@ def listClassroom():
     if not courses:
         print('No courses found')
     else:
-        print('Courses:')
+        totalProcess = restProcess = len(courses)
+        print(u'total Courses: {} '.format(totalProcess))
+
         with open(options['output_csv'], 'w') as f:
             writer = csv.writer(f, lineterminator='\n')
             # csv indexes
             writer.writerow(
                 ['courseName', 'courseSection', 'courseId', 'classCode', 'ownerId', 'teacherName', 'status'])
-            pool = Pool(processes = maxProcess)
-            multi_args = []
+            # prepare multiple arguments..
+            multipleArgs = []
             for course in courses:
-                multi_args.append([course])
-            results = pool.starmap(listClassroomMulti, multi_args)
+                multipleArgs.append([course])
+            #print(multi_args)
+            #results = pool.starmap(listClassroomMulti, multi_args)
+            #writer.writerows(results)
+            # initialize CSV results
+            results = []
+            # open Multiprocessing Pool
+            with Pool(maxProcess) as pool:
+                # Using tqdm() for represent progress bar.
+                for result in tqdm(pool.istarmap(listClassroomMulti, multipleArgs), total=len(courses)):
+                    results.append(result)
+            # write csv file.
             writer.writerows(results)
 
 def listClassroomMulti(course):
     results = serviceEnrollment.courses().teachers().list(courseId=course.get('id')).execute()
-    print(u'{}..'.format(course.get('id')))
+    #print(u'{}..'.format(course.get('id')), end="")
     teachers = results.get('teachers', [])
     teacherName = ""
     for teacher in teachers:
@@ -339,6 +352,8 @@ def infoClassroom(courseId):
 # main()
 courseIdFile = "coursesID.csv"
 maxProcess = 10
+totalProcess = 0
+restProcess = 0
 
 if __name__ == '__main__':
     global adminUser
