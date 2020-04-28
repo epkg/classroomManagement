@@ -1,121 +1,0 @@
-  0%|          | 0/408 [00:00<?, ?it/s]Courses:
-  0%|          | 1/408 [00:00<06:23,  1.06it/s]  7%|▋         | 28/408 [00:01<04:11,  1.51it/s] 12%|█▏        | 47/408 [00:01<02:47,  2.15it/s] 14%|█▍        | 59/408 [00:01<01:54,  3.05it/s] 18%|█▊        | 74/408 [00:01<01:17,  4.32it/s] 22%|██▏       | 91/408 [00:01<00:51,  6.10it/s] 26%|██▌       | 105/408 [00:01<00:35,  8.55it/s] 29%|██▉       | 119/408 [00:01<00:24, 11.89it/s] 33%|███▎      | 136/408 [00:01<00:16, 16.48it/s] 37%|███▋      | 152/408 [00:01<00:11, 22.46it/s] 41%|████      | 167/408 [00:01<00:08, 30.06it/s] 45%|████▍     | 182/408 [00:02<00:05, 39.33it/s] 48%|████▊     | 197/408 [00:02<00:04, 50.47it/s] 52%|█████▏    | 212/408 [00:02<00:03, 62.93it/s] 56%|█████▌    | 227/408 [00:02<00:02, 62.35it/s] 59%|█████▉    | 240/408 [00:02<00:02, 62.76it/s] 61%|██████    | 247/408 [00:02<00:01, 85.49it/s]
-Process Process-247:
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 93, in run
-  File "createCourse.py", line 350, in listClassroomMulti
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/_helpers.py", line 134, in positional_wrapper
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 901, in execute
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 177, in _retry_request
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/google_auth_httplib2.py", line 198, in request
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1824, in request
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1273, in __init__
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 214, in _build_ssl_context
-OSError: [Errno 24] Too many open files
-Process Process-244:
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1557, in _conn_request
-    conn.connect()
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1324, in connect
-    sock.connect((self.host, self.port))
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
-    self.run()
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 93, in run
-    self._target(*self._args, **self._kwargs)
-  File "createCourse.py", line 350, in listClassroomMulti
-    results = serviceEnrollment.courses().teachers().list(courseId=course.get('id')).execute()
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/_helpers.py", line 134, in positional_wrapper
-    return wrapped(*args, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 901, in execute
-    headers=self.headers,
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 204, in _retry_request
-    raise exception
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 177, in _retry_request
-    resp, content = http.request(uri, method, *args, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/google_auth_httplib2.py", line 198, in request
-    uri, method, body=body, headers=request_headers, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1991, in request
-    cachekey,
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1651, in _request
-    conn, request_uri, method, body, headers
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1564, in _conn_request
-    raise ServerNotFoundError("Unable to find the server at %s" % conn.host)
-httplib2.ServerNotFoundError: Unable to find the server at classroom.googleapis.com
-Process Process-245:
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1557, in _conn_request
-    conn.connect()
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1305, in connect
-    address_info = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/socket.py", line 745, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
-    self.run()
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 93, in run
-    self._target(*self._args, **self._kwargs)
-  File "createCourse.py", line 350, in listClassroomMulti
-    results = serviceEnrollment.courses().teachers().list(courseId=course.get('id')).execute()
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/_helpers.py", line 134, in positional_wrapper
-    return wrapped(*args, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 901, in execute
-    headers=self.headers,
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 204, in _retry_request
-    raise exception
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 177, in _retry_request
-    resp, content = http.request(uri, method, *args, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/google_auth_httplib2.py", line 198, in request
-    uri, method, body=body, headers=request_headers, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1991, in request
-    cachekey,
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1651, in _request
-    conn, request_uri, method, body, headers
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1564, in _conn_request
-    raise ServerNotFoundError("Unable to find the server at %s" % conn.host)
-httplib2.ServerNotFoundError: Unable to find the server at classroom.googleapis.com
-Process Process-246:
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1557, in _conn_request
-    conn.connect()
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1305, in connect
-    address_info = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/socket.py", line 745, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 258, in _bootstrap
-    self.run()
-  File "/Users/sira/.pyenv/versions/3.6.3/lib/python3.6/multiprocessing/process.py", line 93, in run
-    self._target(*self._args, **self._kwargs)
-  File "createCourse.py", line 350, in listClassroomMulti
-    results = serviceEnrollment.courses().teachers().list(courseId=course.get('id')).execute()
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/_helpers.py", line 134, in positional_wrapper
-    return wrapped(*args, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 901, in execute
-    headers=self.headers,
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 204, in _retry_request
-    raise exception
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/googleapiclient/http.py", line 177, in _retry_request
-    resp, content = http.request(uri, method, *args, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/google_auth_httplib2.py", line 198, in request
-    uri, method, body=body, headers=request_headers, **kwargs)
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1991, in request
-    cachekey,
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1651, in _request
-    conn, request_uri, method, body, headers
-  File "/Users/sira/.pyenv/versions/py363Classroom/lib/python3.6/site-packages/httplib2/__init__.py", line 1564, in _conn_request
-    raise ServerNotFoundError("Unable to find the server at %s" % conn.host)
-httplib2.ServerNotFoundError: Unable to find the server at classroom.googleapis.com
