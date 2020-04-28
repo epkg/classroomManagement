@@ -1,4 +1,5 @@
 # istarmap.py
+# cf. https://stackoverflow.com/questions/57354700/starmap-combined-with-tqdm
 import multiprocessing.pool as mpp
 
 
