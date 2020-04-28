@@ -10,7 +10,6 @@ Google Classroom API を使うことで、これを解決できます。
 
 
 # Google Classroom API を使うための準備
-===
 Google の API を使うためには GCP(Google Cloud Platform)上の 「IAM と管理」を使って API 利用のために Client Key(と Secret Key)を取得した上で OAuth2 によるユーザ認証を噛ませておきました。（詳細は [Google Classroom API Manual(Python)](https://developers.google.com/classroom/quickstart/python) を参照）
 
 IAM から上記の鍵ペアを含む credentials を json 形式でダウンロードし、credentials.json という名前で保存します。
@@ -57,7 +56,6 @@ Options:
 ```
 
 # 各種ファイルの準備
-===
 実際のプログラムを実行する流れは以下のとおりです
 まず、最初に管理者アカウントを記した config.ini を作成します
 
@@ -91,7 +89,6 @@ adminUser=administrator@ef.gh.com
 ```
 
 # 実行手順
-===
 全ての教員が学生が同一ドメイン内(例： xxxx@ef.gh.com)でアカウントを保有している場合において、classes.csv にある授業を Classroom 上で作成し、enrollments.csv にしたがって学生を登録する場合、上記ファイルを同じディレクトリにおいた状態で
 
 ```
@@ -102,7 +99,7 @@ adminUser=administrator@ef.gh.com
 なお、プログラムの初回実行時には、２つの権限レベル(Authorize Request)を利用するために OAuth2 が要求され、token情報(token.create_class.pickle / token.enroll.pickle)がローカルに保存されます。
 
 作成されたコースの一覧は coursesID.csv というファイルに出力されます。
-もし、学生が別ドメイン(例： xxxx@ed.ef.gh.com)である場合、
+もし、学生が別ドメイン (例： xxxx@ed.ef.gh.com) である場合、
 
 ```
 % python3 classroomManagement.py all --foreign-domain
