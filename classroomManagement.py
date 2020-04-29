@@ -19,7 +19,7 @@ from multiprocessing import Pool
 __doc__ = """{f}
 
 Usage:
-    {f} all [--dry-run] [--foreign-domain]
+    {f} all [--dry-run] [--teacher] [--foreign-domain]
     {f} create [<class_file>] [--dry-run]
     {f} enroll [<enroll_file>] [--dry-run] [--teacher] [--foreign-domain]
     {f} remove <courses>... [--dry-run]
@@ -28,10 +28,10 @@ Usage:
     {f} -h | --help
 
 Options:
-    all         create new courses and enroll students on the Google Classroom.
+    all         create new courses and enroll users on the Google Classroom.
     create      create only new courses (default: classes.csv).
-    enroll      enroll students on courses (default: enrollments.csv).
-                --teacher: invite / enroll Teacher(default Student)
+    enroll      enroll users on courses (default: enrollments.csv).
+                --teacher: invite / enroll Teacher role(default Student role)
                 --foreign-domain: force invite mode
     remove      remove courses from classroom(courseId1 courseId2 ... ).
     lists       lists of all courses.
@@ -137,7 +137,7 @@ def api_init_enroll():
 
 def readData():
     global classSubjects, classSections, classTeachers
-    global studentEmails
+    global userEmails
     global enrollUsers
     global courseLists
 
@@ -156,17 +156,17 @@ def readData():
             classSubjects[line[0]] = line[1]
             classTeachers[line[0]] = line[2]
             classSections[line[0]] = line[3]
-    # read students.csv, getting email address from students id
+    # read users.csv, getting email address from user id
     # csv format:
-    # student id, student Email
-    with open("students.csv", "r") as f:
-        studentEmails = {}
+    # user id, user Email
+    with open("users.csv", "r") as f:
+        userEmails = {}
         for line in f:
             line = line.rstrip("\n").split(",")
-            studentEmails[line[0]] = line[1]
-    # read enroll student lists for each class
+            userEmails[line[0]] = line[1]
+    # read enroll user lists for each class
     # csv format:
-    # classCode(Multiple Key), student id
+    # classCode(Multiple Key), user id
     with open(enrollFile, "r") as f:
         enrollUsers = {}
         for line in f:
@@ -236,8 +236,26 @@ def deleteClassroom(courseId):
     # serviceClassroom.courses().get(id=courseId).execute()
 
 
-def inviteUser(courseId, userId, Role):
-    user = {"userId": userId, "role": Role}
+def inviteUsers(classId):
+    Role = 'TEACHER' if 'teacherRole' in options else 'STUDENT'
+    multipleArgs = []
+    for userId in enrollUsers[classId]:
+        courseId = courseLists[classId]
+        inviteUser = userEmails[userId]
+        print(u'courseId={}, classId={}, inviteUser={}'.format(courseId, classId, inviteUser))
+        user = {
+            "courseId": courseId,
+            "userId": inviteUser,
+            "role": Role
+        }
+        multipleArgs.append([user])
+    with Pool(maxProcess) as pool:
+        for _ in tqdm(pool.istarmap(inviteUsersProc, multipleArgs), total=len(enrollUsers[classId])):
+            pass
+
+
+def inviteUsersProc(user):
+    print(u'user={}'.format(user))
     try:
         user = serviceEnrollment.invitations().create(body=user).execute()
         print("done")
@@ -250,47 +268,50 @@ def inviteUser(courseId, userId, Role):
         else:
             raise
 
-
-def enrollTeacer(courseId, teacherId):
-    teacher = {"userId": teacherId}
-    teacher = (
-        serviceEnrollment.courses()
-        .teachers()
-        .create(courseId=courseId, body=teacher)
-        .execute()
-    )
-    print("Course {0} enroll {1} User".format(courseId, teacherId))
-
-
 #
-# enroll students to a classroom with no confirmation cannot execute
-# due to lack of authority(teacher / classroom domain != student domain).
+# enroll users to a classroom with no confirmation cannot execute
+# due to lack of authority(teacher / classroom domain != user domain).
 #
-def enrollUser(courseId, userId):
-    # test code: trying multiuser in 1 request.
-    # student = []
-    # for userId in userIds:
-    #    student.append({
-    #        'courseId': courseId,
-    #        'userId': userId,
-    #        'role': 'STUDENT'
-    #    })
-    # print(student)
-    student = {"userId": userId}
+def createUsers(classId):
+    multipleArgs = []
+    for userId in enrollUsers[classId]:
+        courseId = courseLists[classId]
+        enrollUser = userEmails[userId]
+        print(u'courseId={}, classId={}, inviteUser={}'.format(courseId, classId, enrollUser))
+        user = {
+            "userId": enrollUser,
+        }
+        multipleArgs.append([courseId, user])
+    with Pool(maxProcess) as pool:
+        for _ in tqdm(pool.istarmap(createUsersProc, multipleArgs), total=len(enrollUsers[classId])):
+            pass
+
+
+def createUsersProc(courseId, user):
     try:
-        student = (
-            serviceEnrollment.courses()
-            .students()
-            .create(
-                courseId=courseId,
-                body=student,
-                #            enrollmentCode=enrollCode
+        if 'teacherRole' in options:
+            user = (
+                serviceEnrollment.courses()
+                .teachers()
+                .create(
+                    courseId=courseId,
+                    body=user,
+                )
+                .execute()
             )
-            .execute()
-        )
+        else:
+            user = (
+                serviceEnrollment.courses()
+                .students()
+                .create(
+                    courseId=courseId,
+                    body=user,
+                )
+                .execute()
+            )
         print(
-            'User {0} was enrolled as a student in the course with ID "{1}"'.format(
-                student.get("profile").get("name").get("fullName"), courseId
+            'User {0} was enrolled as a user in the course with ID "{1}"'.format(
+                user.get("profile").get("name").get("fullName"), courseId
             )
         )
     except HttpError as e:
@@ -298,7 +319,7 @@ def enrollUser(courseId, userId):
         if error.get("code") == 409:
             print(
                 "User {0} are already a member of this course.".format(
-                    student.get("profile").get("name").get("fullName")
+                    user.get("profile").get("name").get("fullName")
                 )
             )
         elif error.get("code") == 403:
@@ -315,8 +336,8 @@ def listClassroom():
     if not courses:
         print("No courses found")
     else:
-        totalCourse = len(courses)
-        print(u"total Courses: {} ".format(totalCourses))
+        totalCourses = len(courses)
+        print(u"total Courses: {} ".format(totalProcess))
 
         with open(options["output_csv"], "w") as f:
             writer = csv.writer(f, lineterminator="\n")
@@ -376,9 +397,9 @@ def infoClassroom(courseId):
 
 # main()
 courseIdFile = "coursesID.csv"
+# max parallel requests for Google Classroom API
+# cf. https://developers.google.com/classroom/limits?hl=ja
 maxProcess = 10
-totalProcess = 0
-restProcess = 0
 
 if __name__ == "__main__":
     global adminUser
@@ -413,7 +434,7 @@ if __name__ == "__main__":
         infoClassroom(options["courseId"])
         exit()
     else:
-        target = courseLists
+         target = courseLists
     for classCode in target.keys():
         classTeacher = classTeachers[classCode] + "@fuk.kindai.ac.jp"
         classSubject = classSubjects[classCode] + "(" + classCode + ")"
@@ -438,7 +459,7 @@ if __name__ == "__main__":
         # addAdminUser(courseId)
         #
         if execMode == "enroll" or execMode == "default":
-            # add adminUser while students are added to a course
+            # add adminUser while users are added to a course
             # if enrolling user's unipa code exist in classCode(unipa)
             if classCode in enrollUsers:
                 if (
@@ -447,24 +468,13 @@ if __name__ == "__main__":
                     and "foreignDomain" in options
                 ):
                     addAdminUser(courseId)
-                # print(enrollUsers[classCode])
-                for userId in enrollUsers[classCode]:
-                    if not "teacherRole" in options:
-                        studentEmail = studentEmails[userId]
-                    print(classCode, userId, end="")
-                    if not options["dry-run"]:
-                        print(" is enrolling.. ", end="")
-                        if "teacherRole" in options:
-                            if "foreignDomain" in options:
-                                inviteUser(courseId, userId, "TEACHER")
-                            else:
-                                enrollTeacer(courseId, userId)
-                        else:
-                            if "foreignDomain" in options:
-                                inviteUser(courseId, studentEmail, "STUDENT")
-                            else:
-                                enrollUser(courseId, studentEmail)
-                            # print(studentEmail, end="")
+                if not options["dry-run"]:
+                    print(" is enrolling.. ", end="")
+                    #if "teacherRole" in options:
+                    if "foreignDomain" in options:
+                            inviteUsers(classCode)
+                    else:
+                            createUsers(classCode)
                 if (
                     classTeacher != adminUser
                     and not options["dry-run"]
