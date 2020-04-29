@@ -34,7 +34,7 @@ IAM から上記の鍵ペアを含む credentials を json 形式でダウンロ
 classroomManagement.py
 
 Usage:
-    classroomManagement.py all [--dry-run] [--foreign-domain]
+    classroomManagement.py all [--dry-run] [--teacher] [--foreign-domain]
     classroomManagement.py create [<class_file>] [--dry-run]
     classroomManagement.py enroll [<enroll_file>] [--dry-run] [--teacher] [--foreign-domain]
     classroomManagement.py remove <courses>... [--dry-run]
@@ -43,10 +43,10 @@ Usage:
     classroomManagement.py -h | --help
 
 Options:
-    all         create new courses and enroll students on the Google Classroom.
+    all         create new courses and enroll users on the Google Classroom.
     create      create only new courses (default: classes.csv).
-    enroll      enroll students on courses (default: enrollments.csv).
-                --teacher: invite / enroll Teacher(default Student)
+    enroll      enroll users on courses (default: enrollments.csv).
+                --teacher: invite / enroll Teacher role(default Student role)
                 --foreign-domain: force invite mode
     remove      remove courses from classroom(courseId1 courseId2 ... ).
     lists       lists of all courses.
@@ -65,7 +65,7 @@ Options:
 adminUser=administrator@ef.gh.com
 ```
 
-入力は履修登録システム等から出力できる授業一覧(classes.csv) と登録者一覧(enrollments.csv)、さらには学籍番号とメールアドレスを対応付ける(students.csv) を準備します。
+入力は履修登録システム等から出力できる授業一覧(classes.csv) と登録者一覧(enrollments.csv)、さらには学籍番号や教職員番号等とメールアドレスを対応付ける(users.csv) を準備します。
 
 以下、各 csv のサンプルです
 
@@ -82,7 +82,7 @@ adminUser=administrator@ef.gh.com
 0000A000,12345678902
 ```
 
--students.csv
+-users.csv
 ```
 12345678901,asdf@ef.gh.com
 12345678902,abcd@ef.gh.com
@@ -118,6 +118,9 @@ adminUser=administrator@ef.gh.com
 % python3 classroomManagement.py enroll [<enroll_file>]
 ```
 
-として学生を投入します。ただし、学生追加は一人ずつしかできないため、 multiprocessing による並列実行化を予定しています（lists コマンドのみ並列化済み）。
+として学生を投入します。
+なお、enroll および lists 処理については、Multiprocessing による並列実行が可能です。Google Classroom API ではクラス登録・削除は 1 ユーザ毎、開講クラス一覧に各コースの概要を取得するには１コース毎に処理が必要となります。
+なお、Multiprocessing による最大並列数(maxProcess)はデフォルトで 10 プロセスとしています。Google Classroom API の利用上限は 25 query / sec とあります。手元の環境下では、1 query 辺り 実測で1.5秒弱程度でした。
+[Google Classroom API; Usage Limits](https://developers.google.com/classroom/limits?hl=ja)
 
 他にも、指定したコースIDのクラスを削除する remove コマンド(現在のところ、削除確認がないので注意)、開講している全てのクラスを抽出する lists コマンド、特定のコースIDの情報を表示する info コマンド（こちらは仮実装）も使えます。
