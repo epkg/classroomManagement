@@ -34,12 +34,12 @@ IAM から上記の鍵ペアを含む credentials を json 形式でダウンロ
 classroomManagement.py
 
 Usage:
-    classroomManagement.py all [--dry-run] [--teacher] [--foreign-domain]
-    classroomManagement.py create [<class_file>] [--dry-run]
-    classroomManagement.py enroll [<enroll_file>] [--dry-run] [--teacher] [--foreign-domain]
-    classroomManagement.py remove <courses>... [--dry-run]
-    classroomManagement.py lists <output_csv>
-    classroomManagement.py info <course_id>
+    classroomManagement.py all [--dry-run] [--teacher] [--foreign-domain] [--debug]
+    classroomManagement.py create [<class_file>] [--dry-run] [--debug]
+    classroomManagement.py enroll [<enroll_file>] [--class <class_file>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
+    classroomManagement.py remove <courses>... [--dry-run] [--debug]
+    classroomManagement.py lists <output_csv> [--debug]
+    classroomManagement.py info <course_id> [--debug]
     classroomManagement.py -h | --help
 
 Options:
@@ -96,7 +96,7 @@ adminUser=administrator@ef.gh.com
 ```
 
 とすれば作成できます。
-なお、プログラムの初回実行時には、２つの権限レベル(Authorize Request)を利用するために OAuth2 が要求され、token情報(token.create_class.pickle / token.enroll.pickle)がローカルに保存されます。
+なお、プログラムの初回実行時には、３つの権限レベル(Authorize Request)を利用するために OAuth2 が要求され、token情報(token.pickle)がローカルに保存されます。
 
 作成されたコースの一覧は coursesID.csv というファイルに出力されます。
 もし、学生が別ドメイン (例： xxxx@ed.ef.gh.com) である場合、
@@ -105,6 +105,10 @@ adminUser=administrator@ef.gh.com
 % python3 classroomManagement.py all --foreign-domain
 ```
 とすることで、教員が学生を招待することができます（同一ドメイン内であれば「招待」ではなく「登録」が可能です）
+
+===
+ただし、教員による学生や教員(--teacher オプション)の招待は 500件/日 と制限が掛かるようなので注意が必要です。 
+===
 
 この他にも授業クラス（コース）だけを作成したい場合は
 
@@ -123,4 +127,4 @@ adminUser=administrator@ef.gh.com
 なお、Multiprocessing による最大並列数(maxProcess)はデフォルトで 10 プロセスとしています。Google Classroom API の利用上限は 25 query / sec とあります。手元の環境下では、1 query 辺り 実測で1.5秒弱程度でした。
 [Google Classroom API; Usage Limits](https://developers.google.com/classroom/limits?hl=ja)
 
-他にも、指定したコースIDのクラスを削除する remove コマンド(現在のところ、削除確認がないので注意)、開講している全てのクラスを抽出する lists コマンド、特定のコースIDの情報を表示する info コマンド（こちらは仮実装）も使えます。
+他にも、指定したコースIDのクラスを削除する remove コマンド(現在のところ、削除確認がないので注意)、開講している全てのクラスを抽出する lists コマンド、特定のコースIDの情報を表示する info コマンドも使えます。
