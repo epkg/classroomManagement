@@ -21,10 +21,11 @@ __doc__ = """{f}
 Usage:
     {f} all [--dry-run] [--teacher] [--foreign-domain] [--debug]
     {f} create [<class_file>] [--dry-run] [--debug]
-    {f} enroll [<enroll_file>] [--class <class_file>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
+    {f} enroll [<enroll_file>] [<course_lists>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
     {f} remove <courses>... [--dry-run] [--debug]
     {f} lists <output_csv> [--debug]
     {f} info <course_id> [--debug]
+    {f} crawl <course_lists> <output_csv>[--debug]
     {f} -h | --help
 
 Options:
@@ -36,6 +37,7 @@ Options:
     remove      remove courses from classroom(courseId1 courseId2 ... ).
     lists       lists of all courses.
     info        information of course information.
+    crawl       display situations of students registration.
 
     -h --help   Show this screen and exit.
 """.format(
@@ -58,8 +60,8 @@ def parseOptions():
             options["foreignDomain"] = True
         if args["<enroll_file>"]:
             options["enrollFile"] = args["<enroll_file>"]
-        if args["--class"]:
-            options["classFile"] = args["<class_file>"]
+        if args["<course_lists>"]:
+            options["courseIdFile"] = args["<course_lists>"]
     elif args["remove"]:
         execMode = "remove"
         options["courses"] = args["<courses>"]
@@ -69,6 +71,10 @@ def parseOptions():
     elif args["info"]:
         execMode = "info"
         options["courseId"] = args["<course_id>"]
+    elif args["crawl"]:
+        execMode = "crawl"
+        options["courseIdFile"] = args["<course_lists>"]
+        options["output_csv"] = args["<output_csv>"]
     elif args["all"]:
         execMode = "default"
     # print(execMode)
@@ -88,7 +94,8 @@ def api_init():
     """ Initialization of Classroom API for enroll teacher / student to each classroom
     """
     # !!!!Important!!!!
-    SCOPES = ["https://www.googleapis.com/auth/classroom.courses", "https://www.googleapis.com/auth/classroom.rosters", "https://www.googleapis.com/auth/classroom.profile.emails"]
+    SCOPES = ["https://www.googleapis.com/auth/classroom.courses",
+              "https://www.googleapis.com/auth/classroom.rosters", "https://www.googleapis.com/auth/classroom.profile.emails"]
     # If modifying these scopes, delete the file token.pickle.
     global serviceClassroom
     creds = None
@@ -117,11 +124,12 @@ def readData():
     global classSubjects, classSections, classTeachers
     global userEmails
     global enrollUsers
-    global courseLists, courseOwners
+    global courseLists, courseNames, courseOwners, classCodes
 
     # set filename configured by the execute option
     classFile = options["classFile"] if "classFile" in options else "classes.csv"
     enrollFile = options["enrollFile"] if "enrollFile" in options else "enrollments.csv"
+    courseIdFile = options["courseIdFile"] if "courseIdFile" in options else "coursesID.csv"
     # read classes.csv for opened classroom
     # csv format:
     # classCode(Key), subjectName, teacher id, className
@@ -130,7 +138,11 @@ def readData():
         classTeachers = {}
         classSections = {}
         for line in f:
+            if line == "\n":
+                continue
             line = line.rstrip("\n").split(",")
+            if(line[0][0] == "#"):
+                continue
             classSubjects[line[0]] = line[1]
             classTeachers[line[0]] = line[2]
             classSections[line[0]] = line[3]
@@ -140,7 +152,11 @@ def readData():
     with open("users.csv", "r") as f:
         userEmails = {}
         for line in f:
+            if line == "\n":
+                continue
             line = line.rstrip("\n").split(",")
+            if(line[0][0] == "#"):
+                continue
             userEmails[line[0]] = line[1]
     # read enroll user lists for each class
     # csv format:
@@ -148,19 +164,36 @@ def readData():
     with open(enrollFile, "r") as f:
         enrollUsers = {}
         for line in f:
+            if line == "\n":
+                continue
             line = line.rstrip("\n").split(",")
+            if(line[0][0] == "#"):
+                continue
             # multiple values for single key
             enrollUsers.setdefault(line[0], []).append(line[1])
     # read already created course ID
     # csv format:
     # classCode, Google Classroom course id
-    with open("coursesID.csv", "r") as f:
+    with open(courseIdFile, "r") as f:
         courseLists = {}
+        courseNames = {}
         courseOwners = {}
+        classCodes = {}
         for line in f:
+            if line == "\n":
+                continue
             line = line.rstrip("\n").split(",")
-            courseLists[line[0]] = line[1]
-            courseOwners[line[0]] = line[3]
+            if(line[0][0] == "#"):
+                continue
+            if re.match(classCodeRegex, line[0]):  # classCode regex match?
+                courseLists[line[0]] = line[1]
+                courseNames[line[0]] = line[2]
+                courseOwners[line[0]] = line[3]
+                classCodes[line[1]] = line[0]  # revese index
+                if len(line) >= 6:
+                    # overwrite by couseIdFile
+                    classSections[line[0]] = line[5]
+                    classTeachers[line[0]] = line[6]
 
 
 def createClassroom(classSubject, classSections, classTeacher):
@@ -171,7 +204,7 @@ def createClassroom(classSubject, classSections, classTeacher):
     }
     course = serviceClassroom.courses().create(body=course).execute()
     courseId = course.get("id")
-    print(u"Course created: {0} ({1})".format(course.get("name"), courseId))
+    print("Course created: {0} ({1})".format(course.get("name"), courseId))
     enrollCode = course.get("enrollmentCode")  # EnrollmentCode
     # if classTeacher != adminUser:
     #    addAdminUser(courseId)
@@ -179,33 +212,45 @@ def createClassroom(classSubject, classSections, classTeacher):
 
 
 def addAdminUser(courseId):
+    if courseId not in service:
+        service[courseId] = build(
+            "classroom", "v1", credentials=credsClassroom)
     teacher = {"userId": "me"}
     try:
         teacher = (
-            serviceClassroom.courses()
+            service[courseId].courses()
             .teachers()
             .create(courseId=courseId, body=teacher)
             .execute()
         )
+        if options["debug"]:
+            print("Course {0} add Admin User".format(courseId))
     except HttpError as e:
         error = simplejson.loads(e.content).get("error")
-        if error.get("code") == 409: # 409 is already exit
-            print("Already added Admin User")
+        if error.get("code") == 409:  # 409 is already exit
+            if options["debug"]:
+                print("Already added Admin User")
+        elif error.get("code") == 500:  # internal error
+            print("Internal error encountered")
         else:
             raise
-    print("Course {0} add Admin User".format(courseId))
 
 
 def deleteAdminUser(courseId):
+    if courseId not in service:
+        service[courseId] = build(
+            "classroom", "v1", credentials=credsClassroom)
     try:
-        serviceClassroom.courses().teachers().delete(
+        service[courseId].courses().teachers().delete(
             courseId=courseId, userId="me"
         ).execute()
-        print("Course {0} delete Admin User".format(courseId))
+        if options["debug"]:
+            print("Course {0} delete Admin User".format(courseId))
     except HttpError as e:
         error = simplejson.loads(e.content).get("error")
         if error.get("code") == 404:  # 404 is NOT_FOUND
-            print("Course Admin Teacher {0} is not found".format(courseId))
+            if options["debug"]:
+                print("Course Admin Teacher {0} is not found".format(courseId))
         else:
             raise
 
@@ -231,13 +276,13 @@ def inviteUsers(classId):
 
 
 def inviteUsersProc(user):
-    service = {}
     userId = user.get("userId")
     courseId = user.get("courseId")
     # GoogleAPIs are not safe for thread / multiprocessing
     #  due to these are based on httplib2.
     # In this program, each request has a new service instance of GoogleAPI
-    service[userId] = build("classroom", "v1", credentials=credsClassroom)
+    if userId not in service:
+        service[userId] = build("classroom", "v1", credentials=credsClassroom)
     result = 'user={}'.format(userId)
     try:
         user = service[userId].invitations().create(body=user).execute()
@@ -260,22 +305,26 @@ def createUsers(classId):
     for userId in enrollUsers[classId]:
         courseId = courseLists[classId]
         enrollUser = userEmails[userId]
-        print(u'courseId={}, classId={}, inviteUser={}'.format(
+        print('courseId={}, classId={}, inviteUser={}'.format(
             courseId, classId, enrollUser))
         user = {
             "userId": enrollUser,
         }
         multipleArgs.append([courseId, user])
+        print([courseId, user])
     with Pool(maxProcess) as pool:
         for _ in tqdm(pool.istarmap(createUsersProc, multipleArgs), total=len(enrollUsers[classId])):
             pass
 
 
 def createUsersProc(courseId, user):
+    if courseId not in service:
+        service[courseId] = build(
+            "classroom", "v1", credentials=credsClassroom)
     try:
         if 'teacherRole' in options:
             user = (
-                serviceClassroom.courses()
+                service[courseId].courses()
                 .teachers()
                 .create(
                     courseId=courseId,
@@ -285,7 +334,7 @@ def createUsersProc(courseId, user):
             )
         else:
             user = (
-                serviceClassroom.courses()
+                service[courseId].courses()
                 .students()
                 .create(
                     courseId=courseId,
@@ -303,7 +352,7 @@ def createUsersProc(courseId, user):
         if error.get("code") == 409:
             print(
                 "User {0} are already a member of this course.".format(
-                    user.get("profile").get("name").get("fullName")
+                    user.get("userId")
                 )
             )
         elif error.get("code") == 403:
@@ -311,6 +360,7 @@ def createUsersProc(courseId, user):
         else:
             print(error.get("code"))
             raise
+
 
 def deleteClassroom(courseId):
     try:
@@ -325,27 +375,35 @@ def deleteClassroom(courseId):
     # serviceClassroom.courses().get(id=courseId).execute()
 
 
-def listClassroom():
-    results = serviceClassroom.courses().list(pageSize=0).execute()
-    #        pageSize=0, courseStates='ACTIVE').execute()
-    courses = results.get("courses", [])
+def listClassroom(courseStates=None):
+    pageToken = None
+    courses = []
+    while True:
+        results = serviceClassroom.courses().list(pageSize=0, pageToken=pageToken,
+                                                  courseStates=courseStates).execute()
+        # if set pageSize=0, 500 responses are max queue( at 2020.05.06 )
+        pageToken = results.get('nextPageToken', None)
+        courses += results.get("courses", [])
+        if not pageToken:
+            break
     if not courses:
         print("No courses found")
     else:
         totalCourses = len(courses)
-        print(u"total Courses: {} ".format(totalCourses))
-
+        print("total Courses: {} ".format(totalCourses))
         with open(options["output_csv"], "w") as f:
             writer = csv.writer(f, lineterminator="\n")
             # csv indexes
             writer.writerow(
                 [
-                    "courseName",
-                    "courseSection",
-                    "courseId",
                     "classCode",
+                    "courseId",
+                    "courseName",
+                    "emailAddress",
                     "ownerId",
-                    "teacherName",
+                    "courseSection",
+                    "teacherNames",
+                    "enrollCode",
                     "status",
                 ]
             )
@@ -361,47 +419,67 @@ def listClassroom():
                 for result in tqdm(
                     pool.istarmap(listClassroomProc, multipleArgs), total=totalCourses
                 ):
-                    results.append(result)
+                    if result:
+                        results.append(result)
             # write csv file.
             writer.writerows(results)
 
 
 def listClassroomProc(course):
-    results = (
-        serviceClassroom.courses().teachers().list(courseId=course.get("id")).execute()
-    )
-    # print(u'{}..'.format(course.get('id')), end="")
+    courseId = course.get("id")   # notice changed..
+    if courseId not in service:
+        service[courseId] = build(
+            "classroom", "v1", credentials=credsClassroom)
+    results = service[courseId].courses().teachers().list(
+        courseId=courseId).execute()
+    # print('{}..'.format(course.get('id')), end="")
+    # '.*?([0-9]{5}[A-Z][0-9]{4})'
+    classCode = re.match(classCodeRegex, course.get("name"))
+    ownerId = course.get("ownerId")
+    teacherInfo = service[courseId].userProfiles().get(
+        userId=ownerId).execute()
     teachers = results.get("teachers", [])
     teacherName = ""
     for teacher in teachers:
         teacherName += "/" + str(teacher["profile"]["name"]["fullName"])
-    return [
-        course.get("name"),
-        course.get("section"),
-        course.get("id"),
-        course.get("enrollmentCode"),
-        course.get("ownerId"),
-        teacherName.lstrip("/"),
-        course.get("courseState"),
-    ]
+    if classCode:
+        return [
+            classCode.group(1),
+            course.get("id"),
+            course.get("name"),
+            teacherInfo.get("emailAddress"),
+            course.get("ownerId"),
+            course.get("section"),
+            teacherName.lstrip("/"),
+            course.get("enrollmentCode"),
+            course.get("courseState"),
+        ]
+    else:
+        False
 
 
 def infoClassroom(courseId):
     courseInfo = serviceClassroom.courses().get(id=courseId).execute()
-    print(courseInfo)
+    print("courseID: {}".format(courseInfo.get("id")))
+    print("name    : {}".format(courseInfo.get("name")))
+    print("section : {}".format(courseInfo.get("section")))
+    print("status  : {}".format(courseInfo.get("courseState")))
     ownerId = courseInfo.get("ownerId")
+    teacherInfo = serviceClassroom.userProfiles().get(userId=ownerId).execute()
+    print("teacher : {}({})".format(teacherInfo.get(
+        "emailAddress"), teacherInfo.get("name").get("fullName")))
     if (ownerId != adminId):
         addAdminUser(courseId)
     print("Enrolled user lists...")
     results = enrolledStudents(courseId)
     if results:
         for result in sorted(results):
-            print(u"{},{}".format(result[0], result[1]))
+            print("{},{}".format(result[0], result[1]))
     print("Inviting user lists...")
     results = invitedStudents(courseId)
     if results:
         for result in sorted(results):
-            print(u"{},{}".format(result[0], result[1]))
+            print("{},{}".format(result[0], result[1]))
     if (ownerId != adminId):
         deleteAdminUser(courseId)
 
@@ -410,7 +488,8 @@ def enrolledStudents(courseId):
     pageToken = None
     multipleArgs = []
     while True:
-        courseStudents = serviceClassroom.courses().students().list( pageSize=0, courseId=courseId, pageToken=pageToken).execute()
+        courseStudents = serviceClassroom.courses().students().list(
+            pageSize=0, courseId=courseId, pageToken=pageToken).execute()
         if "students" in courseStudents:
             for courseStudent in courseStudents.get("students"):
                 userId = courseStudent.get("profile").get("id")
@@ -432,10 +511,12 @@ def invitedStudents(courseId):
     pageToken = None
     multipleArgs = []
     while True:
-        inviteStudents = serviceClassroom.invitations().list(courseId=courseId, pageSize=0, pageToken=pageToken).execute()
+        inviteStudents = serviceClassroom.invitations().list(
+            courseId=courseId, pageSize=0, pageToken=pageToken).execute()
         if "invitations" in inviteStudents:
             for inviteStudent in inviteStudents.get("invitations"):
-                multipleArgs.append([inviteStudent["userId"]])
+                userId = inviteStudent.get("userId")
+                multipleArgs.append([userId])
             pageToken = inviteStudents.get('nextPageToken', None)
             if not pageToken:
                 break
@@ -450,12 +531,71 @@ def invitedStudents(courseId):
 
 
 def infoClassroomProc(userId):
-    service = {}
-    service[userId] = build("classroom", "v1", credentials=credsClassroom)
+    if userId not in service:
+        service[userId] = build("classroom", "v1", credentials=credsClassroom)
     results = service[userId].userProfiles().get(userId=userId).execute()
-    name =  results.get("name").get("fullName")
+    name = results.get("name").get("fullName")
     studentId = results.get("emailAddress")[0:10]
     return [studentId, name]
+
+
+def crawlClassroom():
+    multipleArgs = []
+    for classCode, courseId in courseLists.items():
+        print(classCode, courseId,
+              courseNames[classCode], courseOwners[classCode])
+        multipleArgs.append([courseId, courseOwners[classCode]])
+    results = []
+    if len(multipleArgs):
+        with Pool(maxProcess) as pool:
+            for result in tqdm(pool.istarmap(crawlClassroomProc, multipleArgs), total=len(multipleArgs)):
+                results.append(result)
+    if results:
+        with open(options["output_csv"], "w") as f:
+            writer = csv.writer(f, lineterminator="\n")
+            # csv indexes
+            writer.writerow(
+                [
+                    "classCode",
+                    "SubjectName",
+                    "Section",
+                    "teacher",
+                    "emailAddress",
+                    "total",
+                    "enroled",
+                    "invited",
+                ]
+            )
+            for result in results:
+                classCode = classCodes[result[0]]
+                writer.writerow([classCode, courseNames[classCode], classSections[classCode], classTeachers[classCode],
+                                 courseOwners[classCode], int(result[1]+result[2]), result[1], result[2]])
+
+
+def crawlClassroomProc(courseId, ownerId):
+    if courseId not in service:
+        service[courseId] = build(
+            "classroom", "v1", credentials=credsClassroom)
+    pageToken = None
+    totalEnrolled = 0
+    while True:
+        courseStudents = service[courseId].courses().students().list(
+            pageSize=0, courseId=courseId, pageToken=pageToken).execute()
+        if "students" in courseStudents:
+            totalEnrolled += len(courseStudents.get("students"))
+        pageToken = courseStudents.get('nextPageToken', None)
+        if not pageToken:
+            break
+    pageToken = None
+    totalInvited = 0
+    while True:
+        inviteStudents = service[courseId].invitations().list(
+            courseId=courseId, pageSize=0, pageToken=pageToken).execute()
+        if "invitations" in inviteStudents:
+            totalInvited += len(inviteStudents.get("invitations"))
+        if not pageToken:
+            break
+    return [courseId, totalEnrolled, totalInvited]
 
 
 # main()
@@ -464,9 +604,11 @@ courseIdFile = "coursesID.csv"
 # max parallel requests for Google Classroom API
 # cf. https://developers.google.com/classroom/limits?hl=ja
 maxProcess = 10
+service = {}
+
 
 if __name__ == "__main__":
-    global adminUser
+    global adminUser, adminId, classCodeRegex
     global options
     global credsClassroom
     execMode, options = parseOptions()
@@ -476,6 +618,7 @@ if __name__ == "__main__":
     inifile.read("./config.ini", "UTF-8")
     adminUser = inifile.get("user", "adminUser")
     adminId = inifile.get("user", "adminId")
+    classCodeRegex = inifile.get("user", 'classCodeRegex')
     readData()
     if not options["dry-run"]:
         file = open(courseIdFile, "a")
@@ -492,17 +635,23 @@ if __name__ == "__main__":
             print("done")
         exit()
     elif execMode == "lists":
-        listClassroom()
+        listClassroom(courseStates="ACTIVE")
         exit()
     elif execMode == "info":
         courseId = options["courseId"]
-        classCode = re.match('.*?([0-9]{5}[A-Z][0-9]{4})', courseId)
+        # classCodeRegex = '.*?([0-9]{5}[A-Z][0-9]{4})
+        classCode = re.match(classCodeRegex, courseId)
         if classCode:
             classCode = classCode.group(1)
+            print(classCode)
             if classCode in courseLists:
+                print("found")
                 courseId = courseLists[classCode]
         print("course{} Information..".format(courseId))
         infoClassroom(courseId)
+        exit()
+    elif execMode == "crawl":
+        crawlClassroom()
         exit()
     else:
         target = courseLists
@@ -530,7 +679,8 @@ if __name__ == "__main__":
             # add adminUser while users are added to a course
             # if enrolling user's class code exist in classCode
             if classCode in enrollUsers:
-                classTeacher = userEmails[classTeachers[classCode]] if classCode in classTeachers else courseOwners[classCode]
+                classTeacher = userEmails[classTeachers[classCode]
+                                          ] if classCode in classTeachers else courseOwners[classCode]
                 if (
                     classTeacher != adminUser and classTeacher != adminId
                     and not options["dry-run"]
