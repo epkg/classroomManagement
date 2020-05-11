@@ -36,10 +36,12 @@ classroomManagement.py
 Usage:
     classroomManagement.py all [--dry-run] [--teacher] [--foreign-domain] [--debug]
     classroomManagement.py create [<class_file>] [--dry-run] [--debug]
-    classroomManagement.py enroll [<enroll_file>] [--class <class_file>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
+    classroomManagement.py enroll [<enroll_file>] [<course_lists>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
     classroomManagement.py remove <courses>... [--dry-run] [--debug]
     classroomManagement.py lists <output_csv> [--debug]
     classroomManagement.py info <course_id> [--debug]
+    classroomManagement.py crawl <course_lists> <output_csv> [--debug]
+    classroomManagement.py get-stream <course_lists> <keyword> <output_csv>
     classroomManagement.py -h | --help
 
 Options:
@@ -51,6 +53,8 @@ Options:
     remove      remove courses from classroom(courseId1 courseId2 ... ).
     lists       lists of all courses.
     info        information of course information.
+    crawl       display situations of students registration.
+    get-stream  get courses stream(announcements) with [keyword]
 
     -h --help   Show this screen and exit.
 ```
