@@ -25,7 +25,8 @@ Usage:
     {f} remove <courses>... [--dry-run] [--debug]
     {f} lists <output_csv> [--debug]
     {f} info <course_id> [--debug]
-    {f} crawl <course_lists> <output_csv>[--debug]
+    {f} crawl <course_lists> <output_csv> [--debug]
+    {f} get-stream <course_lists> <keyword> <output_csv>
     {f} -h | --help
 
 Options:
@@ -38,6 +39,7 @@ Options:
     lists       lists of all courses.
     info        information of course information.
     crawl       display situations of students registration.
+    get-stream  get courses stream(announcements) with [keyword]
 
     -h --help   Show this screen and exit.
 """.format(
@@ -75,6 +77,11 @@ def parseOptions():
         execMode = "crawl"
         options["courseIdFile"] = args["<course_lists>"]
         options["output_csv"] = args["<output_csv>"]
+    elif args["get-stream"]:
+        execMode = "getStream"
+        options["courseIdFile"] = args["<course_lists>"]
+        options["keyword"] = args["<keyword>"]
+        options["output_csv"] = args["<output_csv>"]
     elif args["all"]:
         execMode = "default"
     # print(execMode)
@@ -95,7 +102,7 @@ def api_init():
     """
     # !!!!Important!!!!
     SCOPES = ["https://www.googleapis.com/auth/classroom.courses",
-              "https://www.googleapis.com/auth/classroom.rosters", "https://www.googleapis.com/auth/classroom.profile.emails"]
+              "https://www.googleapis.com/auth/classroom.rosters", "https://www.googleapis.com/auth/classroom.profile.emails", "https://www.googleapis.com/auth/classroom.announcements.readonly"]
     # If modifying these scopes, delete the file token.pickle.
     global serviceClassroom
     creds = None
@@ -598,8 +605,60 @@ def crawlClassroomProc(courseId, ownerId):
     return [courseId, totalEnrolled, totalInvited]
 
 
+def getClassroomStream():
+    multipleArgs = []
+    for classCode, courseId in courseLists.items():
+        print(classCode, courseId,
+              courseNames[classCode], courseOwners[classCode])
+        multipleArgs.append([courseId])
+    results = []
+    if len(multipleArgs):
+        with Pool(maxProcess) as pool:
+            for result in tqdm(pool.istarmap(getClassroomStreamProc, multipleArgs), total=len(multipleArgs)):
+                results.append(result)
+    if results:
+        with open(options["output_csv"], "w") as f:
+            writer = csv.writer(f, lineterminator="\n")
+            # csv indexes
+            writer.writerow(
+                [
+                    "classCode",
+                    "SubjectName",
+                    "teacher",
+                    "emailAddress",
+                    "announcements"
+                ]
+            )
+            for result in results:
+                classCode = classCodes[result[0]]
+                writer.writerow([classCode, courseNames[classCode],
+                                 classTeachers[classCode], courseOwners[classCode], result[1]])
+
+
+def getClassroomStreamProc(courseId):
+    if courseId not in service:
+        service[courseId] = build(
+            "classroom", "v1", credentials=credsClassroom)
+    pageToken = None
+    announcements = []
+    while True:
+        courseAnnouncements = service[courseId].courses().announcements().list(
+            pageSize=0, courseId=courseId, pageToken=pageToken).execute()
+        if "announcements" in courseAnnouncements:
+            announcements.append(courseAnnouncements.get("announcements"))
+        pageToken = courseAnnouncements.get('nextPageToken', None)
+        if not pageToken:
+            break
+    result = ''
+    for announcement in announcements:
+        for announce in announcement:
+            if re.search(options["keyword"], announce['text']):
+                result += announce['text'].replace('\n', '')
+    return [courseId, result]
+
+
 # main()
-#os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = './credentials.json'
+# os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = './credentials.json'
 courseIdFile = "coursesID.csv"
 # max parallel requests for Google Classroom API
 # cf. https://developers.google.com/classroom/limits?hl=ja
@@ -652,6 +711,9 @@ if __name__ == "__main__":
         exit()
     elif execMode == "crawl":
         crawlClassroom()
+        exit()
+    elif execMode == "getStream":
+        getClassroomStream()
         exit()
     else:
         target = courseLists
