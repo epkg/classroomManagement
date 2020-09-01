@@ -2,10 +2,11 @@
 from __future__ import print_function
 import pickle
 import os.path
-import simplejson
+import sys
 import csv
 import re
 import configparser
+from multiprocessing import Pool
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -13,8 +14,8 @@ from google.auth.transport.requests import Request
 #
 from docopt import docopt
 from tqdm import tqdm
+import simplejson
 import istarmap  # local function
-from multiprocessing import Pool
 
 __doc__ = """{f}
 
@@ -35,7 +36,7 @@ Options:
     enroll      enroll users on courses (default: enrollments.csv).
                 --teacher: invite / enroll Teacher role(default Student role)
                 --foreign-domain: force invite mode
-    remove      remove courses from classroom(courseId1 courseId2 ... ).
+    remove      remove courses from classroom(course_id1 course_id2 ... ).
     lists       lists of all active courses(--all: include provision courses).
     info        information of course information.
     crawl       display situations of students registration.
@@ -108,7 +109,9 @@ def api_init():
     """
     # !!!!Important!!!!
     scopes = ["https://www.googleapis.com/auth/classroom.courses",
-              "https://www.googleapis.com/auth/classroom.rosters", "https://www.googleapis.com/auth/classroom.profile.emails", "https://www.googleapis.com/auth/classroom.announcements.readonly"]
+              "https://www.googleapis.com/auth/classroom.rosters",
+              "https://www.googleapis.com/auth/classroom.profile.emails",
+              "https://www.googleapis.com/auth/classroom.announcements.readonly"]
     # If modifying these scopes, delete the file token.pickle.
     #global service_classroom
     creds = None
@@ -136,26 +139,26 @@ def api_init():
 def read_data():
     """read_data(void)
     """
-    global class_subjects, class_sections, classe_tachers
-    global user_emails, enroll_users
-    global course_lists, courseNames, courseOwners, classCodes
-
+    #global class_subjects, class_sections, classe_tachers
+    #global user_emails, enroll_users
+    #global course_lists, course_names, course_owners, class_codes
+    #global course_id_file
     # set filename configured by the execute option
-    __class_file = options["classFile"] if "classFile" in options else "classes.csv"
-    __enroll_file = options["enrollFile"] if "enrollFile" in options else "enrollments.csv"
-    __course_id_file = options["courseIdFile"] if "courseIdFile" in options else "coursesID.csv"
+    _class_file = options["classFile"] if "classFile" in options else "classes.csv"
+    _enroll_file = options["enrollFile"] if "enrollFile" in options else "enrollments.csv"
+    _course_id_file = options["courseIdFile"] if "courseIdFile" in options else "coursesID.csv"
     # read classes.csv for opened classroom
     # csv format:
-    # classCode(Key), subjectName, teacher id, className
-    with open(__class_file, "r") as f:
-        class_subjects = {}
-        classe_tachers = {}
-        class_sections = {}
+    # class_code(Key), subjectName, teacher id, className
+    with open(_class_file, "r") as f:
+        #class_subjects = {}
+        #classe_tachers = {}
+        #class_sections = {}
         for line in f:
             if line == "\n":
                 continue
             line = line.rstrip("\n").split(",")
-            if(line[0][0] == "#"):
+            if line[0][0] == "#":
                 continue
             try:  # Check duplicated line in classFile
                 class_subjects[line[0]]
@@ -168,94 +171,100 @@ def read_data():
     # csv format:
     # user id, user Email
     with open("users.csv", "r") as f:
-        user_emails = {}
+        #user_emails = {}
         for line in f:
             if line == "\n":
                 continue
             line = line.rstrip("\n").split(",")
-            if(line[0][0] == "#"):
+            if line[0][0] == "#":
                 continue
             user_emails[line[0]] = line[1]
     # read enroll user lists for each class
     # csv format:
-    # classCode(Multiple Key), user id
-    with open(__enroll_file, "r") as f:
-        enroll_users = {}
+    # class_code(Multiple Key), user id
+    with open(_enroll_file, "r") as f:
+        #enroll_users = {}
         for line in f:
             if line == "\n":
                 continue
             line = line.rstrip("\n").split(",")
-            if(line[0][0] == "#"):
+            if line[0][0] == "#":
                 continue
             # multiple values for single key
             enroll_users.setdefault(line[0], []).append(line[1])
     # read already created course ID
     # csv format:
-    # classCode, Google Classroom course id
-    with open(__course_id_file, "r") as f:
-        course_lists = {}
-        courseNames = {}
-        courseOwners = {}
-        classCodes = {}
+    # class_code, Google Classroom course id
+    with open(_course_id_file, "r") as f:
+        #course_lists = {}
+        #course_names = {}
+        #course_owners = {}
+        #class_codes = {}
         for line in f:
             if line == "\n":
                 continue
             line = line.rstrip("\n").split(",")
-            if(line[0][0] == "#"):
+            if line[0][0] == "#":
                 continue
-            if re.match(classCodeRegex, line[0]):  # classCode regex match?
+            if re.match(class_code_regex, line[0]):  # classCode regex match?
                 course_lists[line[0]] = line[1]
-                courseNames[line[0]] = line[2]
-                courseOwners[line[0]] = line[3]
-                classCodes[line[1]] = line[0]  # revese index
+                course_names[line[0]] = line[2]
+                course_owners[line[0]] = line[3]
+                class_codes[line[1]] = line[0]  # revese index
                 if len(line) >= 6:
                     # overwrite by couseIdFile
                     class_sections[line[0]] = line[5]
                     classe_tachers[line[0]] = line[6]
+    return _course_id_file
 
 
-def create_classroom(classSubject, class_sections, classTeacher):
-    # service[classTeacher] = build(
+def create_classroom(_class_subject, _class_section, _class_teacher):
+    """ create_classroom(_class_subject, _class_section, _class_teacher)
+    """
+    # service[_class_teacher] = build(
     #    "classroom", "v1", credentials=creds_classroom)
     try:
         course = {
-            "name": classSubject,
-            "ownerId": classTeacher,
-            "section": class_sections,
+            "name": _class_subject,
+            "ownerId": _class_teacher,
+            "section": _class_section,
         }
         course = service_classroom.courses().create(body=course).execute()
-        courseId = course.get("id")
-        print("Course created: {0} ({1})".format(course.get("name"), courseId))
-        enrollCode = course.get("enrollmentCode")  # EnrollmentCode
-        # if classTeacher != adminUser:
-        #    add_admin_user(courseId)
-    except HttpError as e:
-        error = simplejson.loads(e.content).get("error")
+        _course_id = course.get("id")
+        print("Course created: {0} ({1})".format(
+            course.get("name"), _course_id))
+        _enroll_code = course.get("enrollmentCode")  # EnrollmentCode
+        # if _class_teacher != adminUser:
+        #    add_admin_user(_course_id)
+    except HttpError as _e:
+        error = simplejson.loads(_e.content).get("error")
         if error.get("code") == 403:  # 409 is already exit
             print("Permission Denied")
-            courseId = 0
-            enrollCode = ""
+            _course_id = 0
+            _enroll_code = ""
         else:
             raise
-    return courseId, enrollCode
+    return _course_id, _enroll_code
 
 
-def add_admin_user(courseId):
-    if courseId not in service:
-        service[courseId] = build(
+def add_admin_user(_course_id):
+    """add_admin_user(_course_id)
+    """
+    if _course_id not in service:
+        service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
     teacher = {"userId": "me"}
     try:
         teacher = (
-            service[courseId].courses()
+            service[_course_id].courses()
             .teachers()
-            .create(courseId=courseId, body=teacher)
+            .create(courseId=_course_id, body=teacher)
             .execute()
         )
         if options["debug"]:
-            print("Course {0} add Admin User".format(courseId))
-    except HttpError as e:
-        error = simplejson.loads(e.content).get("error")
+            print("Course {0} add Admin User".format(_course_id))
+    except HttpError as _e:
+        error = simplejson.loads(_e.content).get("error")
         if error.get("code") == 409:  # 409 is already exit
             if options["debug"]:
                 print("Already added Admin User")
@@ -265,63 +274,72 @@ def add_admin_user(courseId):
             raise
 
 
-def delete_admin_user(courseId):
-    if courseId not in service:
-        service[courseId] = build(
+def delete_admin_user(_course_id):
+    """delete_admin_user(_course_id)
+    """
+    if _course_id not in service:
+        service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
     try:
-        service[courseId].courses().teachers().delete(
-            courseId=courseId, userId="me"
+        service[_course_id].courses().teachers().delete(
+            courseId=_course_id, userId="me"
         ).execute()
         if options["debug"]:
-            print("Course {0} delete Admin User".format(courseId))
-    except HttpError as e:
-        error = simplejson.loads(e.content).get("error")
+            print("Course {0} delete Admin User".format(_course_id))
+    except HttpError as _e:
+        error = simplejson.loads(_e.content).get("error")
         if error.get("code") == 404:  # 404 is NOT_FOUND
             if options["debug"]:
-                print("Course Admin Teacher {0} is not found".format(courseId))
+                print(
+                    "Course Admin Teacher {0} is not found".format(_course_id))
         else:
             raise
 
 
-def invite_users(classId):
-    Role = 'TEACHER' if 'teacherRole' in options else 'STUDENT'
-    multipleArgs = []
-    for userId in enroll_users[classId]:
-        courseId = course_lists[classId]
-        inviteUser = user_emails[userId]
+def invite_users(class_id):
+    """invite_users(class_id)
+    """
+    _role = 'TEACHER' if 'teacherRole' in options else 'STUDENT'
+    multiple_args = []
+    for user_id in enroll_users[class_id]:
+        _course_id = course_lists[class_id]
+        _invite_user = user_emails[user_id]
         user = {
-            "courseId": courseId,
-            "userId": inviteUser,
-            "role": Role
+            "courseId": _course_id,
+            "user_id": _invite_user,
+            "role": _role
         }
-        multipleArgs.append([user])
+        multiple_args.append([user])
     results = []
-    with Pool(maxProcess) as pool:
-        for result in tqdm(pool.istarmap(invite_users_proc, multipleArgs), total=len(enroll_users[classId])):
+    with Pool(MAX_PROCESS) as pool:
+        for result in tqdm(pool.istarmap(invite_users_proc, multiple_args),
+                           total=len(enroll_users[class_id])):
             results.append(result)
     for result in results:
         print(result)
 
 
 def invite_users_proc(user):
-    userId = user.get("userId")
-    courseId = user.get("courseId")
+    """invite_users_proc(user)
+    """
+    user_id = user.get("userId")
+    _course_id = user.get("courseId")
     # GoogleAPIs are not safe for thread / multiprocessing
     #  due to these are based on httplib2.
     # In this program, each request has a new service instance of GoogleAPI
-    if userId not in service:
-        service[userId] = build("classroom", "v1", credentials=creds_classroom)
-    result = 'user={}'.format(userId)
+    if user_id not in service:
+        service[user_id] = build(
+            "classroom", "v1", credentials=creds_classroom)
+    result = 'user={}'.format(user_id)
     try:
-        user = service[userId].invitations().create(body=user).execute()
-        result += " is enrolled to {}.".format(courseId)
-    except HttpError as e:
-        error = simplejson.loads(e.content).get("error")
+        user = service[user_id].invitations().create(body=user).execute()
+        result += " is enrolled to {}.".format(_course_id)
+    except HttpError as _e:
+        error = simplejson.loads(_e.content).get("error")
         if error.get("code") == 409:
-            result += " is already a invite to ({}).".format(courseId)
+            result += " is already a invite to ({}).".format(_course_id)
         elif error.get("code") == 400:
-            result += " is already a member of ({}).".format(courseId)
+            result += " is already a member of ({}).".format(_course_id)
         elif error.get("code") == 401:
             print("Authentication error")
         else:
@@ -329,55 +347,60 @@ def invite_users_proc(user):
     return result
 
 
-def create_users(classId):
-    multipleArgs = []
-    for userId in enroll_users[classId]:
-        courseId = course_lists[classId]
-        enrollUser = user_emails[userId]
-        print('courseId={}, classId={}, inviteUser={}'.format(
-            courseId, classId, enrollUser))
+def create_users(class_id):
+    """create_users(class_id)
+    """
+    multiple_args = []
+    for user_id in enroll_users[class_id]:
+        _course_id = course_lists[class_id]
+        _enroll_user = user_emails[user_id]
+        print('course_id={}, class_id={}, inviteUser={}'.format(
+            _course_id, class_id, _enroll_user))
         user = {
-            "userId": enrollUser,
+            "userId": _enroll_user,
         }
-        multipleArgs.append([courseId, user])
-        print([courseId, user])
-    with Pool(maxProcess) as pool:
-        for _ in tqdm(pool.istarmap(create_users_proc, multipleArgs), total=len(enroll_users[classId])):
+        multiple_args.append([_course_id, user])
+        print([_course_id, user])
+    with Pool(MAX_PROCESS) as pool:
+        for _ in tqdm(pool.istarmap(create_users_proc, multiple_args),
+                      total=len(enroll_users[class_id])):
             pass
 
 
-def create_users_proc(courseId, user):
-    if courseId not in service:
-        service[courseId] = build(
+def create_users_proc(_course_id, user):
+    """create_users_proc(_course_id, user)
+    """
+    if _course_id not in service:
+        service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
     try:
         if 'teacherRole' in options:
             user = (
-                service[courseId].courses()
+                service[_course_id].courses()
                 .teachers()
                 .create(
-                    courseId=courseId,
+                    courseId=_course_id,
                     body=user,
                 )
                 .execute()
             )
         else:
             user = (
-                service[courseId].courses()
+                service[_course_id].courses()
                 .students()
                 .create(
-                    courseId=courseId,
+                    courseId=_course_id,
                     body=user,
                 )
                 .execute()
             )
         print(
             'User {0} was enrolled as a user in the course with ID "{1}"'.format(
-                user.get("profile").get("name").get("fullName"), courseId
+                user.get("profile").get("name").get("fullName"), _course_id
             )
         )
-    except HttpError as e:
-        error = simplejson.loads(e.content).get("error")
+    except HttpError as _e:
+        error = simplejson.loads(_e.content).get("error")
         if error.get("code") == 409:
             print(
                 "User {0} are already a member of this course.".format(
@@ -391,41 +414,45 @@ def create_users_proc(courseId, user):
             raise
 
 
-def delete_classroom(courseId):
+def delete_classroom(_course_id):
+    """delete_classroom(_course_id)
+    """
     try:
-        service_classroom.courses().delete(id=courseId).execute()
-        print("Course {0} has been removed".format(courseId))
-    except HttpError as e:
-        error = simplejson.loads(e.content).get("error")
+        service_classroom.courses().delete(id=_course_id).execute()
+        print("Course {0} has been removed".format(_course_id))
+    except HttpError as _e:
+        error = simplejson.loads(_e.content).get("error")
         if error.get("code") == 404:  # 404 is NOT_FOUND
-            print("Course ID {0} has already been deleted".format(courseId))
+            print("Course ID {0} has already been deleted".format(_course_id))
         else:
             raise
-    # service_classroom.courses().get(id=courseId).execute()
+    # service_classroom.courses().get(id=_course_id).execute()
 
 
-def list_classroom(courseStates=None):
-    pageToken = None
+def list_classroom(course_states=None):
+    """list_classroom(course_states=None)
+    """
+    page_token = None
     courses = []
     while True:
-        results = service_classroom.courses().list(pageSize=0, pageToken=pageToken,
-                                                   courseStates=courseStates).execute()
+        results = service_classroom.courses().list(pageSize=0, pageToken=page_token,
+                                                   courseStates=course_states).execute()
         # if set pageSize=0, 500 responses are max queue( at 2020.05.06 )
-        pageToken = results.get('nextPageToken', None)
+        page_token = results.get('nextPageToken', None)
         courses += results.get("courses", [])
-        if not pageToken:
+        if not page_token:
             break
     if not courses:
         print("No courses found")
     else:
-        totalCourses = len(courses)
-        print("total Courses: {} ".format(totalCourses))
-        with open(options["outputCsv"], "w") as f:
-            writer = csv.writer(f, lineterminator="\n")
+        _total_courses = len(courses)
+        print("total Courses: {} ".format(_total_courses))
+        with open(options["outputCsv"], "w") as _f:
+            writer = csv.writer(_f, lineterminator="\n")
             # csv indexes
             writer.writerow(
                 [
-                    "classCode",
+                    "class_code",
                     "courseId",
                     "courseName",
                     "emailAddress",
@@ -437,17 +464,16 @@ def list_classroom(courseStates=None):
                 ]
             )
             # prepare multiple arguments..
-            multipleArgs = []
+            multiple_args = []
             for course in courses:
-                multipleArgs.append([course])
+                multiple_args.append([course])
             # initialize CSV results
             results = []
             # open Multiprocessing Pool
-            with Pool(maxProcess) as pool:
+            with Pool(MAX_PROCESS) as pool:
                 # Using tqdm() for represent progress bar.
                 for result in tqdm(
-                    pool.istarmap(list_classroom_proc, multipleArgs), total=totalCourses
-                ):
+                        pool.istarmap(list_classroom_proc, multiple_args), total=_total_courses):
                     if result:
                         results.append(result)
             # write csv file.
@@ -455,136 +481,150 @@ def list_classroom(courseStates=None):
 
 
 def list_classroom_proc(course):
-    courseId = course.get("id")   # notice changed..
-    if courseId not in service:
-        service[courseId] = build(
+    """list_classroom_proc(course)
+    """
+    _course_id = course.get("id")   # notice changed..
+    if _course_id not in service:
+        service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
-    results = service[courseId].courses().teachers().list(
-        courseId=courseId).execute()
+    results = service[_course_id].courses().teachers().list(
+        courseId=_course_id).execute()
     # print('{}..'.format(course.get('id')), end="")
     # '.*?([0-9]{5}[A-Z][0-9]{4})'
-    classCode = re.match(classCodeRegex, course.get("name"))
-    ownerId = course.get("ownerId")
-    teacherInfo = service[courseId].userProfiles().get(
-        userId=ownerId).execute()
+    _class_code = re.match(class_code_regex, course.get("name"))
+    _owner_id = course.get("ownerId")
+    _teacher_info = service[_course_id].userProfiles().get(
+        userId=_owner_id).execute()
     teachers = results.get("teachers", [])
-    teacherName = ""
+    _teacher_names = ""
     for teacher in teachers:
-        teacherName += "/" + str(teacher["profile"]["name"]["fullName"])
-    if classCode:
+        _teacher_names += "/" + str(teacher["profile"]["name"]["fullName"])
+    if _class_code:
         return [
-            classCode.group(1),
+            _class_code.group(1),
             course.get("id"),
             course.get("name"),
-            teacherInfo.get("emailAddress"),
+            _teacher_info.get("emailAddress"),
             course.get("ownerId"),
             course.get("section"),
-            teacherName.lstrip("/"),
+            _teacher_names.lstrip("/"),
             course.get("enrollmentCode"),
             course.get("courseState"),
         ]
     else:
-        False
+        return False
 
 
-def info_classroom(courseId):
-    courseInfo = service_classroom.courses().get(id=courseId).execute()
-    print("courseID: {}".format(courseInfo.get("id")))
-    print("name    : {}".format(courseInfo.get("name")))
-    print("section : {}".format(courseInfo.get("section")))
-    print("status  : {}".format(courseInfo.get("courseState")))
-    ownerId = courseInfo.get("ownerId")
-    teacherInfo = service_classroom.userProfiles().get(userId=ownerId).execute()
-    print("owner : {}({})".format(teacherInfo.get(
-        "emailAddress"), teacherInfo.get("name").get("fullName")))
+def info_classroom(_course_id):
+    _course_info = service_classroom.courses().get(id=_course_id).execute()
+    print("course_id: {}".format(_course_info.get("id")))
+    print("name    : {}".format(_course_info.get("name")))
+    print("section : {}".format(_course_info.get("section")))
+    print("status  : {}".format(_course_info.get("courseState")))
+    _owner_id = _course_info.get("ownerId")
+    _teacher_info = service_classroom.userProfiles().get(userId=_owner_id).execute()
+    print("owner : {}({})".format(_teacher_info.get(
+        "emailAddress"), _teacher_info.get("name").get("fullName")))
     results = service_classroom.courses().teachers().list(
-        courseId=courseId).execute()
+        courseId=_course_id).execute()
     teachers = results.get("teachers", [])
-    teacherName = ""
+    _teacher_names = ""
     for teacher in teachers:
-        teacherName += "/" + str(teacher["profile"]["name"]["fullName"])
-    print("teacher : {}".format(teacherName))
-    if (ownerId != adminId):
-        add_admin_user(courseId)
+        _teacher_names += "/" + str(teacher["profile"]["name"]["fullName"])
+    print("teacher : {}".format(_teacher_names))
+    if _owner_id != admin_id:
+        add_admin_user(_course_id)
     print("Enrolled user lists...")
-    results = enrolled_students(courseId)
+    results = enrolled_students(_course_id)
     if results:
         for result in sorted(results):
             print("{},{}".format(result[0], result[1]))
     print("Inviting user lists...")
-    results = invited_students(courseId)
+    results = invited_students(_course_id)
     if results:
         for result in sorted(results):
             print("{},{}".format(result[0], result[1]))
-    if (ownerId != adminId):
-        delete_admin_user(courseId)
+    if _owner_id != admin_id:
+        delete_admin_user(_course_id)
 
 
-def enrolled_students(courseId):
-    pageToken = None
-    multipleArgs = []
+def enrolled_students(_course_id):
+    """enrolled_students(_course_id)
+    """
+    page_token = None
+    multiple_args = []
     while True:
-        courseStudents = service_classroom.courses().students().list(
-            pageSize=0, courseId=courseId, pageToken=pageToken).execute()
-        if "students" in courseStudents:
-            for courseStudent in courseStudents.get("students"):
-                userId = courseStudent.get("profile").get("id")
-                multipleArgs.append([userId])
-            pageToken = courseStudents.get('nextPageToken', None)
-            if not pageToken:
+        _course_students = service_classroom.courses().students().list(
+            pageSize=0, courseId=_course_id, pageToken=page_token).execute()
+        if "students" in _course_students:
+            for course_student in _course_students.get("students"):
+                user_id = course_student.get("profile").get("id")
+                multiple_args.append([user_id])
+            page_token = _course_students.get('nextPageToken', None)
+            if not page_token:
                 break
         else:
             break
     results = []
-    if len(multipleArgs):
-        with Pool(maxProcess) as pool:
-            for result in tqdm(pool.istarmap(info_classroom_proc, multipleArgs), total=len(multipleArgs)):
+    if len(multiple_args):
+        with Pool(MAX_PROCESS) as pool:
+            for result in tqdm(
+                    pool.istarmap(info_classroom_proc, multiple_args), total=len(multiple_args)):
                 results.append(result)
     return results
 
 
-def invited_students(courseId):
-    pageToken = None
-    multipleArgs = []
+def invited_students(_course_id):
+    """invited_students(_course_id)
+    """
+    page_token = None
+    multiple_args = []
     while True:
-        inviteStudents = service_classroom.invitations().list(
-            courseId=courseId, pageSize=0, pageToken=pageToken).execute()
-        if "invitations" in inviteStudents:
-            for inviteStudent in inviteStudents.get("invitations"):
-                userId = inviteStudent.get("userId")
-                multipleArgs.append([userId])
-            pageToken = inviteStudents.get('nextPageToken', None)
-            if not pageToken:
+        _invite_students = service_classroom.invitations().list(
+            courseId=_course_id, pageSize=0, pageToken=page_token).execute()
+        if "invitations" in _invite_students:
+            for _invite_student in _invite_students.get("invitations"):
+                user_id = _invite_student.get("userId")
+                multiple_args.append([user_id])
+            page_token = _invite_students.get('nextPageToken', None)
+            if not page_token:
                 break
         else:
             break
     results = []
-    if len(multipleArgs):
-        with Pool(maxProcess) as pool:
-            for result in tqdm(pool.istarmap(info_classroom_proc, multipleArgs), total=len(multipleArgs)):
+    if len(multiple_args):
+        with Pool(MAX_PROCESS) as pool:
+            for result in tqdm(
+                    pool.istarmap(info_classroom_proc, multiple_args), total=len(multiple_args)):
                 results.append(result)
     return results
 
 
-def info_classroom_proc(userId):
-    if userId not in service:
-        service[userId] = build("classroom", "v1", credentials=creds_classroom)
-    results = service[userId].userProfiles().get(userId=userId).execute()
+def info_classroom_proc(user_id):
+    """info_classroom_proc(user_id)
+    """
+    if user_id not in service:
+        service[user_id] = build(
+            "classroom", "v1", credentials=creds_classroom)
+    results = service[user_id].userProfiles().get(userId=user_id).execute()
     name = results.get("name").get("fullName")
-    studentId = results.get("emailAddress")[0:10]
-    return [studentId, name]
+    student_id = results.get("emailAddress")[0:10]
+    return [student_id, name]
 
 
 def crawl_classroom():
-    multipleArgs = []
-    for classCode, courseId in course_lists.items():
-        print(classCode, courseId,
-              courseNames[classCode], courseOwners[classCode])
-        multipleArgs.append([courseId, courseOwners[classCode]])
+    """crawl_classroom()
+    """
+    multiple_args = []
+    for _class_code, _course_id in course_lists.items():
+        print(_class_code, _course_id,
+              course_names[_class_code], course_owners[_class_code])
+        multiple_args.append([_course_id, course_owners[_class_code]])
     results = []
-    if len(multipleArgs):
-        with Pool(maxProcess) as pool:
-            for result in tqdm(pool.istarmap(crawl_classroom_proc, multipleArgs), total=len(multipleArgs)):
+    if len(multiple_args):
+        with Pool(MAX_PROCESS) as pool:
+            for result in tqdm(pool.istarmap(
+                    crawl_classroom_proc, multiple_args), total=len(multiple_args)):
                 results.append(result)
     if results:
         with open(options["outputCsv"], "w") as f:
@@ -603,47 +643,62 @@ def crawl_classroom():
                 ]
             )
             for result in results:
-                classCode = classCodes[result[0]]
-                writer.writerow([classCode, courseNames[classCode], class_sections[classCode], classe_tachers[classCode],
-                                 courseOwners[classCode], int(result[1]+result[2]), result[1], result[2]])
+                _class_code = class_codes[result[0]]
+                writer.writerow(
+                    [
+                        _class_code,
+                        course_names[_class_code],
+                        class_sections[_class_code],
+                        classe_tachers[_class_code],
+                        course_owners[_class_code],
+                        int(result[1] + result[2]),
+                        result[1],
+                        result[2]
+                    ]
+                )
 
 
-def crawl_classroom_proc(courseId, ownerId):
-    if courseId not in service:
-        service[courseId] = build(
+def crawl_classroom_proc(_course_id, _owner_id):
+    """crawl_classroom_proc(_course_id, _owner_id)
+    """
+    if _course_id not in service:
+        service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
-    pageToken = None
-    totalEnrolled = 0
+    page_token = None
+    total_enrolled = 0
     while True:
-        courseStudents = service[courseId].courses().students().list(
-            pageSize=0, courseId=courseId, pageToken=pageToken).execute()
-        if "students" in courseStudents:
-            totalEnrolled += len(courseStudents.get("students"))
-        pageToken = courseStudents.get('nextPageToken', None)
-        if not pageToken:
+        _course_students = service[_course_id].courses().students().list(
+            pageSize=0, courseId=_course_id, pageToken=page_token).execute()
+        if "students" in _course_students:
+            total_enrolled += len(_course_students.get("students"))
+        page_token = _course_students.get('nextPageToken', None)
+        if not page_token:
             break
-    pageToken = None
-    totalInvited = 0
+    page_token = None
+    total_invited = 0
     while True:
-        inviteStudents = service[courseId].invitations().list(
-            courseId=courseId, pageSize=0, pageToken=pageToken).execute()
-        if "invitations" in inviteStudents:
-            totalInvited += len(inviteStudents.get("invitations"))
-        if not pageToken:
+        _invite_students = service[_course_id].invitations().list(
+            courseId=_course_id, pageSize=0, pageToken=page_token).execute()
+        if "invitations" in _invite_students:
+            total_invited += len(_invite_students.get("invitations"))
+        if not page_token:
             break
-    return [courseId, totalEnrolled, totalInvited]
+    return [_course_id, total_enrolled, total_invited]
 
 
 def get_classroom_stream():
-    multipleArgs = []
-    for classCode, courseId in course_lists.items():
-        print(classCode, courseId,
-              courseNames[classCode], courseOwners[classCode])
-        multipleArgs.append([courseId])
+    """get_classroom_stream()
+    """
+    multiple_args = []
+    for _class_code, _course_id in course_lists.items():
+        print(_class_code, _course_id,
+              course_names[_class_code], course_owners[_class_code])
+        multiple_args.append([_course_id])
     results = []
-    if len(multipleArgs):
-        with Pool(maxProcess) as pool:
-            for result in tqdm(pool.istarmap(get_classroom_stream_proc, multipleArgs), total=len(multipleArgs)):
+    if len(multiple_args):
+        with Pool(MAX_PROCESS) as pool:
+            for result in tqdm(
+                    pool.istarmap(get_classroom_stream_proc, multiple_args), total=len(multiple_args)):
                 results.append(result)
     if results:
         with open(options["outputCsv"], "w") as f:
@@ -659,92 +714,104 @@ def get_classroom_stream():
                 ]
             )
             for result in results:
-                classCode = classCodes[result[0]]
-                writer.writerow([classCode, courseNames[classCode],
-                                 classe_tachers[classCode], courseOwners[classCode], result[1]])
+                _class_code = class_codes[result[0]]
+                writer.writerow(
+                    [
+                        _class_code,
+                        course_names[_class_code],
+                        classe_tachers[_class_code],
+                        course_owners[_class_code],
+                        result[1]
+                    ]
+                )
 
 
-def get_classroom_stream_proc(courseId):
-    if courseId not in service:
-        service[courseId] = build(
+def get_classroom_stream_proc(_course_id):
+    """get_classroom_stream_proc(_course_id)
+    """
+    if _course_id not in service:
+        service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
-    pageToken = None
+    page_token = None
     announcements = []
     while True:
-        courseAnnouncements = service[courseId].courses().announcements().list(
-            pageSize=0, courseId=courseId, pageToken=pageToken).execute()
-        if "announcements" in courseAnnouncements:
-            announcements.append(courseAnnouncements.get("announcements"))
-        pageToken = courseAnnouncements.get('nextPageToken', None)
-        if not pageToken:
+        course_announcements = service[_course_id].courses().announcements().list(
+            pageSize=0, courseId=_course_id, pageToken=page_token).execute()
+        if "announcements" in course_announcements:
+            announcements.append(course_announcements.get("announcements"))
+        page_token = course_announcements.get('nextPageToken', None)
+        if not page_token:
             break
     result = ''
     for announcement in announcements:
         for announce in announcement:
             if re.search(options["keyword"], announce['text']):
                 result += announce['text'].replace('\n', '')
-    return [courseId, result]
+    return [_course_id, result]
 
 
 # main()
 # os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = './credentials.json'
-courseIdFile = "coursesID.csv"
 # max parallel requests for Google Classroom API
 # cf. https://developers.google.com/classroom/limits?hl=ja
-maxProcess = 10
-service = {}
 
 
 if __name__ == "__main__":
-    global adminUser, adminId, classCodeRegex
-    global options
-    global creds_classroom
-    global service_classroom
-    global class_subjects, class_sections, classe_tachers
-    global user_emails, enroll_users
-    global course_lists, courseNames, courseOwners, classCodes
+    MAX_PROCESS = 10
+    service = {}
+    #global adminUser, admin_id, class_code_regex
+    class_subjects = {}
+    classe_tachers = {}
+    class_sections = {}
+    user_emails = {}
+    enroll_users = {}
+    course_lists = {}
+    course_names = {}
+    course_owners = {}
+    class_codes = {}
+
     exec_mode, options = parse_options()
     # print(exec_mode, options)
     # load config.ini
     inifile = configparser.ConfigParser()
     inifile.read("./config.ini", "UTF-8")
     adminUser = inifile.get("user", "adminUser")
-    adminId = inifile.get("user", "adminId")
-    classCodeRegex = inifile.get("user", 'classCodeRegex')
-    read_data()
+    admin_id = inifile.get("user", "adminId")
+    class_code_regex = inifile.get("user", 'classCodeRegex')
+    course_id_file = read_data()
     if not options["dry-run"]:
-        file = open(courseIdFile, "a")
+        file = open(course_id_file, "a")
         csvWrite = csv.writer(file)
     # Google Classroom API activation
     if not options["dry-run"]:
         # Classroom Management scope credentials
         creds_classroom, service_classroom = api_init()
-    if exec_mode == "create" or exec_mode == "default":
+    if exec_mode in ('create', 'default'):
         target = class_subjects
     elif exec_mode == "remove":
-        for courseId in options["courses"]:
-            print("removing.. {}".format(courseId), end="")
-            delete_classroom(courseId)
+        for course_id in options["courses"]:
+            print("removing.. {}".format(course_id), end="")
+            delete_classroom(course_id)
             print("done")
-        exit()
+        sys.exit()
     elif exec_mode == "lists":
         if options["listAll"]:
             list_classroom()
         else:
-            list_classroom(courseStates="ACTIVE")
-        exit()
+            list_classroom(course_states="ACTIVE")
+        sys.exit()
     elif exec_mode == "info":
-        courseId = options["courseId"]
-        # classCodeRegex = '.*?([0-9]{5}[A-Z][0-9]{4})
-        classCode = re.match(classCodeRegex, courseId)
-        if classCode:
-            classCode = classCode.group(1)
-            print(classCode)
-            if classCode in course_lists:
+        course_id = options["courseId"]
+        # class_code_regex = '.*?([0-9]{5}[A-Z][0-9]{4})
+        class_code = re.match(class_code_regex, course_id)
+        if class_code:
+            class_code = class_code.group(1)
+            print(class_code)
+            if class_code in course_lists:
                 print("found")
-                courseId = course_lists[classCode]
-        print("course{} Information..".format(courseId))
-        info_classroom(courseId)
+                course_id = course_lists[class_code]
+        print("course{} Information..".format(course_id))
+        info_classroom(course_id)
         exit()
     elif exec_mode == "crawl":
         crawl_classroom()
@@ -754,53 +821,54 @@ if __name__ == "__main__":
         exit()
     else:
         target = course_lists
-    for classCode in target.keys():
-        courseId = course_lists[classCode] if classCode in course_lists else 0
+    for class_code in target.keys():
+        course_id = course_lists[class_code] if class_code in course_lists else 0
         if exec_mode == "create" or exec_mode == "default":
             print("creating..")
-            classTeacher = user_emails[classe_tachers[classCode]]
-            classSubject = class_subjects[classCode] + "(" + classCode + ")"
-            classSection = class_sections[classCode]
+            class_teacher = user_emails[classe_tachers[class_code]]
+            class_subject = class_subjects[class_code] + "(" + class_code + ")"
+            classSection = class_sections[class_code]
             if not options["dry-run"]:
                 # create Classroom ownered by class teacher.
-                courseId, enrollCode = create_classroom(
-                    classSubject, class_sections[classCode], classTeacher
+                course_id, enroll_code = create_classroom(
+                    class_subject, class_sections[class_code], class_teacher
                 )
-                if (courseId == 0):
+                if (course_id == 0):
                     continue
                 csvWrite.writerow(
-                    [classCode, courseId, classSubject, classTeacher, enrollCode]
+                    [class_code, course_id, class_subject,
+                        class_teacher, enroll_code]
                 )
-            print("Course    ID:{}".format(courseId))
-            print("Class   Code:{}".format(classCode))
-            print("Course  Name:{}".format(classSubject))
+            print("Course    ID:{}".format(course_id))
+            print("Class   Code:{}".format(class_code))
+            print("Course  Name:{}".format(class_subject))
             print("Subject Name:{}".format(classSection))
-            print("Lecturer    :{}".format(classTeacher))
+            print("Lecturer    :{}".format(class_teacher))
         if exec_mode == "enroll" or exec_mode == "default":
             # add adminUser while users are added to a course
-            # if enrolling user's class code exist in classCode
-            if classCode in enroll_users:
-                classTeacher = user_emails[classe_tachers[classCode]
-                                           ] if classCode in classe_tachers else courseOwners[classCode]
+            # if enrolling user's class code exist in class_code
+            if class_code in enroll_users:
+                class_teacher = user_emails[classe_tachers[class_code]
+                                            ] if class_code in classe_tachers else course_owners[class_code]
                 if (
-                    classTeacher != adminUser and classTeacher != adminId
+                    class_teacher != adminUser and class_teacher != admin_id
                     and not options["dry-run"]
                     and "foreignDomain" in options
                 ):
-                    add_admin_user(courseId)
+                    add_admin_user(course_id)
                     pass
                 if not options["dry-run"]:
                     print("Enrolling users.. ", end="")
                     if "foreignDomain" in options:
-                        invite_users(classCode)
+                        invite_users(class_code)
                     else:
-                        create_users(classCode)
+                        create_users(class_code)
                 if (
-                    classTeacher != adminUser and classTeacher != adminId
+                    class_teacher != adminUser and class_teacher != admin_id
                     and not options["dry-run"]
                     and "foreignDomain" in options
                 ):
                     pass
-                    delete_admin_user(courseId)
+                    delete_admin_user(course_id)
     if not options["dry-run"]:
         file.close()
