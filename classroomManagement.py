@@ -23,8 +23,9 @@ Usage:
     {f} all [--dry-run] [--teacher] [--foreign-domain] [--debug]
     {f} create [<classFile>] [--dry-run] [--debug]
     {f} enroll [<enrollFile>] [<courseLists>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
+    {f} unenroll <userId> <courses>... [--dry-run] [--debug]
     {f} remove <courses>... [--dry-run] [--debug]
-    {f} lists <outputCsv> [--all] [--debug]
+    {f} lists <outputCsv> [--all-states] [--all-courses] [--debug]
     {f} info <courseId> [--debug]
     {f} crawl <courseLists> <outputCsv> [--debug]
     {f} get-stream <courseLists> <keyword> <outputCsv>
@@ -36,8 +37,11 @@ Options:
     enroll      enroll users on courses (default: enrollments.csv).
                 --teacher: invite / enroll Teacher role(default Student role)
                 --foreign-domain: force invite mode
+    unenroll    unenroll user from courses(course_id1, course_i2, ...).
     remove      remove courses from classroom(course_id1 course_id2 ... ).
-    lists       lists of all active courses(--all: include provision courses).
+    lists       lists of all active courses
+                --all-states: include provision and archived courses
+                --all-courses: include not following with name conventions
     info        information of course information.
     crawl       display situations of students registration.
     get-stream  get courses stream(announcements) with [keyword]
@@ -51,57 +55,65 @@ Options:
 def parse_options():
     """perse_options(void)
     """
-    __options = {}
+    _options = {}
     args = docopt(__doc__)
     if args["create"]:
-        __exec_mode = "create"
+        _exec_mode = "create"
         if args["<classFile>"]:
-            __options["classFile"] = args["<classFile>"]
+            _options["classFile"] = args["<classFile>"]
     elif args["enroll"]:
-        __exec_mode = "enroll"
+        _exec_mode = "enroll"
         if args["--teacher"]:
-            __options["teacherRole"] = True
+            _options["teacherRole"] = True
         if args["--foreign-domain"]:
-            __options["foreignDomain"] = True
+            _options["foreignDomain"] = True
         if args["<enrollFile>"]:
-            __options["enrollFile"] = args["<enrollFile>"]
+            _options["enrollFile"] = args["<enrollFile>"]
         if args["<courseLists>"]:
-            __options["courseIdFile"] = args["<courseLists>"]
+            _options["courseIdFile"] = args["<courseLists>"]
+    elif args["unenroll"]:
+        _exec_mode = "unenroll"
+        _options["userId"] = args["<userId>"]
+        _options["courses"] = args["<courses>"]
     elif args["remove"]:
-        __exec_mode = "remove"
-        __options["courses"] = args["<courses>"]
+        _exec_mode = "remove"
+        _options["courses"] = args["<courses>"]
     elif args["lists"]:
-        __exec_mode = "lists"
-        if args["--all"]:
-            __options["listAll"] = True
+        _exec_mode = "lists"
+        if args["--all-states"]:
+            _options["listAllStates"] = True
         else:
-            __options["listAll"] = False
-        __options["outputCsv"] = args["<outputCsv>"]
+            _options["listAllStates"] = False
+        if args["--all-courses"]:
+            _options["listAllCourses"] = True
+        else:
+            _options["listAllCourses"] = False
+        _options["outputCsv"] = args["<outputCsv>"]
     elif args["info"]:
-        __exec_mode = "info"
-        __options["courseId"] = args["<courseId>"]
+        _exec_mode = "info"
+        _options["courseId"] = args["<courseId>"]
     elif args["crawl"]:
-        __exec_mode = "crawl"
-        __options["courseIdFile"] = args["<courseLists>"]
-        __options["outputCsv"] = args["<outputCsv>"]
+        _exec_mode = "crawl"
+        _options["courseIdFile"] = args["<courseLists>"]
+        _options["outputCsv"] = args["<outputCsv>"]
     elif args["get-stream"]:
-        __exec_mode = "getStream"
-        __options["courseIdFile"] = args["<courseLists>"]
-        __options["keyword"] = args["<keyword>"]
-        __options["outputCsv"] = args["<outputCsv>"]
+        _exec_mode = "getStream"
+        _options["courseIdFile"] = args["<courseLists>"]
+        _options["keyword"] = args["<keyword>"]
+        _options["outputCsv"] = args["<outputCsv>"]
     elif args["all"]:
-        __exec_mode = "default"
-    # print(__exec_mode)
-    __options["dry-run"] = True if args["--dry-run"] else False
-    __options["debug"] = True if args["--debug"] else False
-    if __options["debug"]:
+        _exec_mode = "default"
+    # print(_exec_mode)
+    _options["dry-run"] = True if args["--dry-run"] else False
+    _options["debug"] = True if args["--debug"] else False
+    if _options["debug"]:
         print("  {0:<20}{1:<20}{2:<20}".format("key", "value", "type"))
         print("  {0:-<60}".format(""))
         for k, v in args.items():
             print("  {0:<20}{1:<20}{2:<20}".format(
                 str(k), str(v), str(type(v))))
 
-    return __exec_mode, __options
+    return _exec_mode, _options
 
 
 def api_init():
@@ -113,7 +125,7 @@ def api_init():
               "https://www.googleapis.com/auth/classroom.profile.emails",
               "https://www.googleapis.com/auth/classroom.announcements.readonly"]
     # If modifying these scopes, delete the file token.pickle.
-    #global service_classroom
+    # global service_classroom
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -132,17 +144,17 @@ def api_init():
         # Save the credentials for the next run
         with open("token.pickle", "wb") as token:
             pickle.dump(creds, token)
-    __service_classroom = build("classroom", "v1", credentials=creds)
-    return creds, __service_classroom
+    _service_classroom = build("classroom", "v1", credentials=creds)
+    return creds, _service_classroom
 
 
 def read_data():
     """read_data(void)
     """
-    #global class_subjects, class_sections, classe_tachers
-    #global user_emails, enroll_users
-    #global course_lists, course_names, course_owners, class_codes
-    #global course_id_file
+    # global class_subjects, class_sections, classe_tachers
+    # global user_emails, enroll_users
+    # global course_lists, course_names, course_owners, class_codes
+    # global course_id_file
     # set filename configured by the execute option
     _class_file = options["classFile"] if "classFile" in options else "classes.csv"
     _enroll_file = options["enrollFile"] if "enrollFile" in options else "enrollments.csv"
@@ -150,57 +162,62 @@ def read_data():
     # read classes.csv for opened classroom
     # csv format:
     # class_code(Key), subjectName, teacher id, className
-    with open(_class_file, "r") as f:
-        #class_subjects = {}
-        #classe_tachers = {}
-        #class_sections = {}
-        for line in f:
-            if line == "\n":
-                continue
-            line = line.rstrip("\n").split(",")
-            if line[0][0] == "#":
-                continue
-            try:  # Check duplicated line in classFile
-                class_subjects[line[0]]
-                continue
-            except KeyError:  # first appear line is active
-                class_subjects[line[0]] = line[1]
-                classe_tachers[line[0]] = line[2]
-                class_sections[line[0]] = line[3]
+    if exec_mode in "create":
+        with open(_class_file, "r") as _f:
+            # class_subjects = {}
+            # classe_tachers = {}
+            # class_sections = {}
+            for line in _f:
+                if line == "\n":
+                    continue
+                line = line.rstrip("\n").split(",")
+                if line[0][0] == "#":
+                    continue
+                try:  # Check duplicated line in classFile
+                    class_subjects[line[0]]
+                    continue
+                except KeyError:  # first appear line is active
+                    class_subjects[line[0]] = line[1]
+                    classe_tachers[line[0]] = line[2]
+                    class_sections[line[0]] = line[3]
     # read users.csv, getting email address from user id
     # csv format:
     # user id, user Email
-    with open("users.csv", "r") as f:
-        #user_emails = {}
-        for line in f:
-            if line == "\n":
-                continue
-            line = line.rstrip("\n").split(",")
-            if line[0][0] == "#":
-                continue
-            user_emails[line[0]] = line[1]
+    if exec_mode in ("enroll", "unenroll", "create"):
+        with open("users.csv", "r") as _f:
+            # user_emails = {}
+            for line in _f:
+                if line == "\n":
+                    continue
+                line = line.rstrip("\n").split(",")
+                if line[0][0] == "#":
+                    continue
+                user_emails[line[0]] = line[1]
     # read enroll user lists for each class
     # csv format:
     # class_code(Multiple Key), user id
-    with open(_enroll_file, "r") as f:
-        #enroll_users = {}
-        for line in f:
-            if line == "\n":
-                continue
-            line = line.rstrip("\n").split(",")
-            if line[0][0] == "#":
-                continue
-            # multiple values for single key
-            enroll_users.setdefault(line[0], []).append(line[1])
+    # if any(x in options for x in ("enroll", "unenroll", "create")):
+    if exec_mode in ("enroll", "unenroll", "create"):
+        print("read enroll")
+        with open(_enroll_file, "r") as _f:
+            # enroll_users = {}
+            for line in _f:
+                if line == "\n":
+                    continue
+                line = line.rstrip("\n").split(",")
+                if line[0][0] == "#":
+                    continue
+                # multiple values for single key
+                enroll_users.setdefault(line[0], []).append(line[1])
     # read already created course ID
     # csv format:
     # class_code, Google Classroom course id
-    with open(_course_id_file, "r") as f:
-        #course_lists = {}
-        #course_names = {}
-        #course_owners = {}
-        #class_codes = {}
-        for line in f:
+    with open(_course_id_file, "r") as _f:
+        # course_lists = {}
+        # course_names = {}
+        # course_owners = {}
+        # class_codes = {}
+        for line in _f:
             if line == "\n":
                 continue
             line = line.rstrip("\n").split(",")
@@ -296,6 +313,29 @@ def delete_admin_user(_course_id):
             raise
 
 
+def delete_user(_course_ids, _user_id):
+    """delete_user(_course_id, _user_id)
+    """
+    for _course_id in _course_ids:
+        if options["dry-run"]:
+            print("user {0} remove from course {1}".format(
+                _user_id, _course_id))
+        else:
+            try:
+                print('unenroll {0} from course id {1}'.format(
+                    _user_id, _course_id))
+                service_classroom.courses().teachers().delete(
+                    courseId=_course_id, userId=_user_id).execute()
+            except HttpError as _e:
+                error = simplejson.loads(_e.content).get("error")
+                if error.get("code") == 404:  # 404 is NOT_FOUND
+                    if options["debug"]:
+                        print(
+                            "{0} is not found in course {1}".format(_user_id, _course_id))
+                else:
+                    raise
+
+
 def invite_users(class_id):
     """invite_users(class_id)
     """
@@ -310,13 +350,16 @@ def invite_users(class_id):
             "role": _role
         }
         multiple_args.append([user])
-    results = []
-    with Pool(MAX_PROCESS) as pool:
-        for result in tqdm(pool.istarmap(invite_users_proc, multiple_args),
-                           total=len(enroll_users[class_id])):
-            results.append(result)
-    for result in results:
-        print(result)
+        if options["debug"]:
+            print([_course_id, user])
+    if not options["dry-run"]:
+        results = []
+        with Pool(MAX_PROCESS) as pool:
+            for result in tqdm(pool.istarmap(invite_users_proc, multiple_args),
+                               total=len(enroll_users[class_id])):
+                results.append(result)
+        for result in results:
+            print(result)
 
 
 def invite_users_proc(user):
@@ -342,6 +385,8 @@ def invite_users_proc(user):
             result += " is already a member of ({}).".format(_course_id)
         elif error.get("code") == 401:
             print("Authentication error")
+        elif error.get("code") == 404:
+            print("course {0} is not found".format(_course_id))
         else:
             raise
     return result
@@ -360,11 +405,12 @@ def create_users(class_id):
             "userId": _enroll_user,
         }
         multiple_args.append([_course_id, user])
-        print([_course_id, user])
-    with Pool(MAX_PROCESS) as pool:
-        for _ in tqdm(pool.istarmap(create_users_proc, multiple_args),
-                      total=len(enroll_users[class_id])):
-            pass
+        if options["debug"]:
+            print([_course_id, user])
+    if not options["dry-run"]:
+        with Pool(MAX_PROCESS) as pool:
+            for _ in tqdm(pool.istarmap(create_users_proc, multiple_args), total=len(enroll_users[class_id])):
+                pass
 
 
 def create_users_proc(_course_id, user):
@@ -409,6 +455,8 @@ def create_users_proc(_course_id, user):
             )
         elif error.get("code") == 403:
             print("...Permission Denied.")
+        elif error.get("code") == 404:
+            print("course {0} is not found".format(_course_id))
         else:
             print(error.get("code"))
             raise
@@ -429,11 +477,15 @@ def delete_classroom(_course_id):
     # service_classroom.courses().get(id=_course_id).execute()
 
 
-def list_classroom(course_states=None):
-    """list_classroom(course_states=None)
+def list_classroom():
+    """list_classroom()
     """
     page_token = None
     courses = []
+    if options["listAllStates"]:
+        course_states = None
+    else:
+        course_states = "ACTIVE"
     while True:
         results = service_classroom.courses().list(pageSize=0, pageToken=page_token,
                                                    courseStates=course_states).execute()
@@ -502,6 +554,18 @@ def list_classroom_proc(course):
     if _class_code:
         return [
             _class_code.group(1),
+            course.get("id"),
+            course.get("name"),
+            _teacher_info.get("emailAddress"),
+            course.get("ownerId"),
+            course.get("section"),
+            _teacher_names.lstrip("/"),
+            course.get("enrollmentCode"),
+            course.get("courseState"),
+        ]
+    elif options["listAllCourses"]:
+        return [
+            None,
             course.get("id"),
             course.get("name"),
             _teacher_info.get("emailAddress"),
@@ -759,7 +823,7 @@ def get_classroom_stream_proc(_course_id):
 if __name__ == "__main__":
     MAX_PROCESS = 10
     service = {}
-    #global adminUser, admin_id, class_code_regex
+    # global adminUser, admin_id, class_code_regex
     class_subjects = {}
     classe_tachers = {}
     class_sections = {}
@@ -794,11 +858,16 @@ if __name__ == "__main__":
             delete_classroom(course_id)
             print("done")
         sys.exit()
+    elif exec_mode == "unenroll":
+        delete_user(options["courses"], options["userId"])
+        print("done")
+        sys.exit()
     elif exec_mode == "lists":
-        if options["listAll"]:
-            list_classroom()
-        else:
-            list_classroom(course_states="ACTIVE")
+        list_classroom()
+#        if options["listAllStates"]:
+#            list_classroom()
+#        else:
+#            list_classroom(course_states="ACTIVE")
         sys.exit()
     elif exec_mode == "info":
         course_id = options["courseId"]
@@ -812,18 +881,18 @@ if __name__ == "__main__":
                 course_id = course_lists[class_code]
         print("course{} Information..".format(course_id))
         info_classroom(course_id)
-        exit()
+        sys.exit()
     elif exec_mode == "crawl":
         crawl_classroom()
-        exit()
+        sys.exit()
     elif exec_mode == "getStream":
         get_classroom_stream()
-        exit()
+        sys.exit()
     else:
         target = course_lists
     for class_code in target.keys():
         course_id = course_lists[class_code] if class_code in course_lists else 0
-        if exec_mode == "create" or exec_mode == "default":
+        if exec_mode in ('create', 'default'):
             print("creating..")
             class_teacher = user_emails[classe_tachers[class_code]]
             class_subject = class_subjects[class_code] + "(" + class_code + ")"
@@ -844,31 +913,33 @@ if __name__ == "__main__":
             print("Course  Name:{}".format(class_subject))
             print("Subject Name:{}".format(classSection))
             print("Lecturer    :{}".format(class_teacher))
-        if exec_mode == "enroll" or exec_mode == "default":
+        if exec_mode in ('enroll', 'default'):
             # add adminUser while users are added to a course
             # if enrolling user's class code exist in class_code
+            # if options["debug"]:
+            #    print('enrollUsers:{0}'.format(enroll_users))
             if class_code in enroll_users:
+                if options["debug"]:
+                    print('classCode:{0}'.format(class_code))
                 class_teacher = user_emails[classe_tachers[class_code]
                                             ] if class_code in classe_tachers else course_owners[class_code]
+                # if invite foreign domain user, adminUser add to class
                 if (
                     class_teacher != adminUser and class_teacher != admin_id
                     and not options["dry-run"]
                     and "foreignDomain" in options
                 ):
                     add_admin_user(course_id)
-                    pass
-                if not options["dry-run"]:
-                    print("Enrolling users.. ", end="")
-                    if "foreignDomain" in options:
-                        invite_users(class_code)
-                    else:
-                        create_users(class_code)
+                print("Enrolling users.. ", end="")
+                if "foreignDomain" in options:
+                    invite_users(class_code)
+                else:
+                    create_users(class_code)
                 if (
                     class_teacher != adminUser and class_teacher != admin_id
                     and not options["dry-run"]
                     and "foreignDomain" in options
                 ):
-                    pass
                     delete_admin_user(course_id)
     if not options["dry-run"]:
         file.close()
