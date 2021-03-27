@@ -92,7 +92,7 @@ def parse_options():
         _options["outputCsv"] = args["<outputCsv>"]
     elif args["archive"]:
         _exec_mode = "archive"
-        _options["courses"] = args ["<courses>"]
+        _options["courses"] = args["<courses>"]
     elif args["all"]:
         _exec_mode = "default"
     # print(_exec_mode)
@@ -203,30 +203,32 @@ def read_data():
     # read already created course ID
     # csv format:
     # class_code, Google Classroom course id
-    with open(_course_id_file, "r") as _f:
-        # course_lists = {}
-        # course_names = {}
-        # course_owners = {}
-        # class_codes = {}
-        for line in _f:
-            if line == "\n":
-                continue
-            line = line.rstrip("\n").split(",")
-            if line[0][0] == "#":
-                continue
-            if re.match(class_code_regex, line[0]):  # classCode regex match?
-                course_lists[line[0]] = line[1]
-                course_names[line[0]] = line[2]
-                course_owners[line[0]] = line[3]
-                class_codes[line[1]] = line[0]  # revese index
-                if len(line) >= 6:
-                    # overwrite by couseIdFile
-                    class_sections[line[0]] = line[5]
-                    class_teachers[line[0]] = line[6]
-                else:
-                    class_sections[line[0]] = None
-                    class_teachers[line[0]] = None
-    return _course_id_file
+    if exec_mode not in ("create"):
+        with open(_course_id_file, "r") as _f:
+            # course_lists = {}
+            # course_names = {}
+            # course_owners = {}
+            # class_codes = {}
+            for line in _f:
+                if line == "\n":
+                    continue
+                line = line.rstrip("\n").split(",")
+                if line[0][0] == "#":
+                    continue
+                # classCode regex match?
+                if re.match(class_code_regex, line[0]):
+                    course_lists[line[0]] = line[1]
+                    course_names[line[0]] = line[2]
+                    course_owners[line[0]] = line[3]
+                    class_codes[line[1]] = line[0]  # revese index
+                    if len(line) >= 6:
+                        # overwrite by couseIdFile
+                        class_sections[line[0]] = line[5]
+                        class_teachers[line[0]] = line[6]
+                    else:
+                        class_sections[line[0]] = None
+                        class_teachers[line[0]] = None
+        return _course_id_file
 
 
 def create_classroom(_class_subject, _class_section, _class_teacher):
@@ -329,6 +331,7 @@ def delete_user(_course_ids, _user_id):
                 else:
                     raise
 
+
 def archive_courses(_course_ids):
     """archive_courses(_course_id)
     """
@@ -355,8 +358,6 @@ def archive_courses(_course_ids):
                             "course {} is not found".format(_course_id))
                 else:
                     raise
-
-
 
 
 def invite_users(class_id):
@@ -969,7 +970,7 @@ if __name__ == "__main__":
                 if options["debug"]:
                     print('classCode:{}{}'.format(
                         class_code, course_owners[class_code]))
-                #class_teacher = user_emails[class_teachers[class_code]
+                # class_teacher = user_emails[class_teachers[class_code]
                 #                            ] if class_code in class_teachers else course_owners[class_code]
                 class_teacher = course_owners[class_code]
                 # if invite foreign domain user, adminUser add to class
