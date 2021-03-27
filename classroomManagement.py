@@ -29,6 +29,7 @@ Usage:
     {f} info <courseId> [--debug]
     {f} crawl <coursesFile> <outputCsv> [--debug]
     {f} get-stream <coursesFile> <keyword> <outputCsv>
+    {f} archive <courses>... [--dry-run] [--debug]
     {f} -h | --help
 
 Options:
@@ -45,7 +46,7 @@ Options:
     info        information of course information.
     crawl       display situations of students registration.
     get-stream  get courses stream(announcements) with [keyword]
-
+    archive     change courses(course_id1, course_i2, ...) state to ARCHIVE.
     -h --help   Show this screen and exit.
 """.format(
     f=__file__
@@ -89,6 +90,9 @@ def parse_options():
         _exec_mode = "getStream"
         _options["keyword"] = args["<keyword>"]
         _options["outputCsv"] = args["<outputCsv>"]
+    elif args["archive"]:
+        _exec_mode = "archive"
+        _options["courses"] = args ["<courses>"]
     elif args["all"]:
         _exec_mode = "default"
     # print(_exec_mode)
@@ -324,6 +328,35 @@ def delete_user(_course_ids, _user_id):
                             "{0} is not found in course {1}".format(_user_id, _course_id))
                 else:
                     raise
+
+def archive_courses(_course_ids):
+    """archive_courses(_course_id)
+    """
+    for _course_id in _course_ids:
+        _course_info = service_classroom.courses().get(id=_course_id).execute()
+        body = {
+            "id": _course_id,
+            "courseState": "ARCHIVED",
+            "name": _course_info.get("name")
+        }
+        if options["dry-run"]:
+            print("course {0} is archived".format(_course_id))
+        else:
+            try:
+                print('trying archive course {}...'.format(_course_id))
+                service_classroom.courses().update(
+                    id=_course_id, body=body).execute()
+                print('done')
+            except HttpError as _e:
+                error = simplejson.loads(_e.content).get("error")
+                if error.get("code") == 404:  # 404 is NOT_FOUND
+                    if options["debug"]:
+                        print(
+                            "course {} is not found".format(_course_id))
+                else:
+                    raise
+
+
 
 
 def invite_users(class_id):
@@ -898,6 +931,9 @@ if __name__ == "__main__":
         sys.exit()
     elif exec_mode == "getStream":
         get_classroom_stream()
+        sys.exit()
+    elif exec_mode == "archive":
+        archive_courses(options["courses"])
         sys.exit()
     else:
         target = course_lists
