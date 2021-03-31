@@ -21,7 +21,7 @@ __doc__ = """{f}
 
 Usage:
     {f} all [--dry-run] [--teacher] [--foreign-domain] [--debug]
-    {f} create [<classFile>] [--dry-run] [--debug]
+    {f} create [<classFile>] [--with-activate] [--dry-run] [--debug]
     {f} enroll [<enrollFile>] [<coursesFile>] [--dry-run] [--teacher] [--foreign-domain] [--debug]
     {f} unenroll <userId> <courses>... [--dry-run] [--debug]
     {f} remove <courses>... [--dry-run] [--debug]
@@ -30,11 +30,13 @@ Usage:
     {f} crawl <coursesFile> <outputCsv> [--debug]
     {f} get-stream <coursesFile> <keyword> <outputCsv>
     {f} archive <courses>... [--dry-run] [--debug]
+    {f} active <courses>... [--dry-run] [--debug]
     {f} -h | --help
 
 Options:
     all         create new courses and enroll users on the Google Classroom.
     create      create only new courses (default: classes.csv).
+                --with-activate: activate when course created
     enroll      enroll users on courses (default: enrollments.csv).
                 --teacher: invite / enroll Teacher role(default Student role)
                 --foreign-domain: force invite mode
@@ -47,6 +49,7 @@ Options:
     crawl       display situations of students registration.
     get-stream  get courses stream(announcements) with [keyword]
     archive     change courses(course_id1, course_i2, ...) state to ARCHIVE.
+    active      change courses(course_id1, course_i2, ...) state to ACTIVE.
     -h --help   Show this screen and exit.
 """.format(
     f=__file__
@@ -64,6 +67,7 @@ def parse_options():
     _options["courseIdFile"] = args["<coursesFile>"] if args["<coursesFile>"] else "coursesID.csv"
     if args["create"]:
         _exec_mode = "create"
+        _options["courseActivate"] = bool(args["[--with-activate]"])
     elif args["enroll"]:
         _exec_mode = "enroll"
         _options["teacherRole"] = bool(args["--teacher"])
@@ -92,6 +96,9 @@ def parse_options():
         _options["outputCsv"] = args["<outputCsv>"]
     elif args["archive"]:
         _exec_mode = "archive"
+        _options["courses"] = args["<courses>"]
+    elif args["active"]:
+        _exec_mode = "active"
         _options["courses"] = args["<courses>"]
     elif args["all"]:
         _exec_mode = "default"
@@ -228,7 +235,7 @@ def read_data():
                     else:
                         class_sections[line[0]] = None
                         class_teachers[line[0]] = None
-        return _course_id_file
+    return _course_id_file
 
 
 def create_classroom(_class_subject, _class_section, _class_teacher):
@@ -236,11 +243,13 @@ def create_classroom(_class_subject, _class_section, _class_teacher):
     """
     # service[_class_teacher] = build(
     #    "classroom", "v1", credentials=creds_classroom)
+    _course_state = "ACTIVE" if options["courseActivate"] else "PROVISIONED"
     try:
         course = {
             "name": _class_subject,
             "ownerId": _class_teacher,
             "section": _class_section,
+            "courseState": _course_state
         }
         course = service_classroom.courses().create(body=course).execute()
         _course_id = course.get("id")
@@ -332,21 +341,27 @@ def delete_user(_course_ids, _user_id):
                     raise
 
 
-def archive_courses(_course_ids):
-    """archive_courses(_course_id)
+def update_courses(_course_ids):
+    """update_courses(_course_id)
     """
+    _course_state = "ARCHIVED" if exec_mode == "archive" else "ACTIVE"
     for _course_id in _course_ids:
         _course_info = service_classroom.courses().get(id=_course_id).execute()
         body = {
             "id": _course_id,
-            "courseState": "ARCHIVED",
-            "name": _course_info.get("name")
+            "courseState": _course_state,
+            "name": _course_info.get("name"),
+            "section": _course_info.get("section"),
+            "description": _course_info.get("description"),
+            "room": _course_info.get("room")
         }
         if options["dry-run"]:
-            print("course {0} is archived".format(_course_id))
+            print("course {0} is changed {1}".format(
+                _course_id, _course_state))
         else:
             try:
-                print('trying archive course {}...'.format(_course_id))
+                print('trying change state to {0} for course {1}...'.format(
+                    _course_state, _course_id))
                 service_classroom.courses().update(
                     id=_course_id, body=body).execute()
                 print('done')
@@ -740,6 +755,7 @@ def crawl_classroom():
                     "total",
                     "enroled",
                     "invited",
+                    "state"
                 ]
             )
             for result in results:
@@ -753,7 +769,8 @@ def crawl_classroom():
                         course_owners[_class_code],
                         int(result[1] + result[2]),
                         result[1],
-                        result[2]
+                        result[2],
+                        result[3]
                     ]
                 )
 
@@ -791,7 +808,8 @@ def crawl_classroom_proc(_course_id, _owner_id):
             total_invited += len(_invite_students.get("invitations"))
         if not page_token:
             break
-    return [_course_id, total_enrolled, total_invited]
+    _course_info = service[_course_id].courses().get(id=_course_id).execute()
+    return [_course_id, total_enrolled, total_invited, _course_info.get("courseState")]
 
 
 def get_classroom_stream():
@@ -933,8 +951,8 @@ if __name__ == "__main__":
     elif exec_mode == "getStream":
         get_classroom_stream()
         sys.exit()
-    elif exec_mode == "archive":
-        archive_courses(options["courses"])
+    elif exec_mode in ('archive', 'active'):
+        update_courses(options["courses"])
         sys.exit()
     else:
         target = course_lists
