@@ -31,6 +31,7 @@ Usage:
     {f} get-stream <coursesFile> <keyword> <outputCsv>
     {f} archive <courses>... [--dry-run] [--debug]
     {f} active <courses>... [--dry-run] [--debug]
+    {f} owner <owner> <courses>... [--dry-run] [--debug]
     {f} -h | --help
 
 Options:
@@ -50,6 +51,7 @@ Options:
     get-stream  get courses stream(announcements) with [keyword]
     archive     change courses(course_id1, course_i2, ...) state to ARCHIVE.
     active      change courses(course_id1, course_i2, ...) state to ACTIVE.
+    owner       change owner of courses(course_id1, course_i2, ...)
     -h --help   Show this screen and exit.
 """.format(
     f=__file__
@@ -99,6 +101,10 @@ def parse_options():
         _options["courses"] = args["<courses>"]
     elif args["active"]:
         _exec_mode = "active"
+        _options["courses"] = args["<courses>"]
+    elif args["owner"]:
+        _exec_mode = "owner"
+        _options["owner"] = args["<owner>"]
         _options["courses"] = args["<courses>"]
     elif args["all"]:
         _exec_mode = "default"
@@ -341,27 +347,30 @@ def delete_user(_course_ids, _user_id):
                     raise
 
 
-def update_courses(_course_ids):
+def update_courses(_course_ids, _owner="none"):
     """update_courses(_course_id)
     """
     _course_state = "ARCHIVED" if exec_mode == "archive" else "ACTIVE"
     for _course_id in _course_ids:
         _course_info = service_classroom.courses().get(id=_course_id).execute()
+        _course_owner = _owner if _owner != "none" else _course_info.get(
+            "owner")
         body = {
             "id": _course_id,
             "courseState": _course_state,
             "name": _course_info.get("name"),
             "section": _course_info.get("section"),
             "description": _course_info.get("description"),
-            "room": _course_info.get("room")
+            "room": _course_info.get("room"),
+            "ownerId": _course_owner
         }
         if options["dry-run"]:
-            print("course {0} is changed {1}".format(
-                _course_id, _course_state))
+            print("course {0} is changed {1}({2})".format(
+                _course_id, _course_state, _course_owner))
         else:
             try:
-                print('trying change state to {0} for course {1}...'.format(
-                    _course_state, _course_id))
+                print('trying change state to {0} for course {1}({2})...'.format(
+                    _course_state, _course_id, _course_owner))
                 service_classroom.courses().update(
                     id=_course_id, body=body).execute()
                 print('done')
@@ -633,6 +642,7 @@ def info_classroom(_course_id):
     print("section : {}".format(_course_info.get("section")))
     print("status  : {}".format(_course_info.get("courseState")))
     _owner_id = _course_info.get("ownerId")
+    print("onwerId  : {}".format(_owner_id))
     _teacher_info = service_classroom.userProfiles().get(userId=_owner_id).execute()
     print("owner : {}({})".format(_teacher_info.get(
         "emailAddress"), _teacher_info.get("name").get("fullName")))
@@ -953,6 +963,9 @@ if __name__ == "__main__":
         sys.exit()
     elif exec_mode in ('archive', 'active'):
         update_courses(options["courses"])
+        sys.exit()
+    elif exec_mode == "owner":
+        update_courses(options["courses"], options["owner"])
         sys.exit()
     else:
         target = course_lists
