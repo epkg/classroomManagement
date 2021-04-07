@@ -67,7 +67,7 @@ def parse_options():
     _options["courseIdFile"] = args["<coursesFile>"] if args["<coursesFile>"] else "coursesID.csv"
     if args["create"]:
         _exec_mode = "create"
-        _options["courseActivate"] = bool(args["[--with-activate]"])
+        _options["courseActivate"] = bool(args["--with-activate"])
     elif args["enroll"]:
         _exec_mode = "enroll"
         _options["teacherRole"] = bool(args["--teacher"])
