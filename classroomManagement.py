@@ -27,6 +27,7 @@ Usage:
     {f} remove <courses>... [--dry-run] [--debug]
     {f} lists <outputCsv> [--all-states] [--all-courses] [--debug]
     {f} info <courseId> [--debug]
+    {f} user <userId>
     {f} crawl <coursesFile> <outputCsv> [--debug]
     {f} get-stream <coursesFile> <keyword> <outputCsv>
     {f} archive <courses>... [--dry-run] [--debug]
@@ -47,6 +48,9 @@ Options:
                 --all-states: include provision and archived courses
                 --all-courses: include not following with name conventions
     info        information of course information.
+                --detail: include course enrolled / invited students informati
+on.
+    user        information of user.
     crawl       display situations of students registration.
     get-stream  get courses stream(announcements) with [keyword]
     archive     change courses(course_id1, course_i2, ...) state to ARCHIVE.
@@ -89,6 +93,10 @@ def parse_options():
     elif args["info"]:
         _exec_mode = "info"
         _options["courseId"] = args["<courseId>"]
+        _options["detail"] = bool(args["--detail"])
+    elif args["user"]:
+        _exec_mode = "user"
+        _options["userId"] = args["<userId>"]
     elif args["crawl"]:
         _exec_mode = "crawl"
         _options["outputCsv"] = args["<outputCsv>"]
@@ -278,6 +286,7 @@ def create_classroom(_class_subject, _class_section, _class_teacher):
 def add_admin_user(_course_id):
     """add_admin_user(_course_id)
     """
+    _course_id = get_course_id(_course_id)
     if _course_id not in service:
         service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
@@ -305,6 +314,7 @@ def add_admin_user(_course_id):
 def delete_admin_user(_course_id):
     """delete_admin_user(_course_id)
     """
+    _course_id = get_course_id(_course_id)
     if _course_id not in service:
         service[_course_id] = build(
             "classroom", "v1", credentials=creds_classroom)
@@ -352,6 +362,7 @@ def update_courses(_course_ids, _owner="none"):
     """
     _course_state = "ARCHIVED" if exec_mode == "archive" else "ACTIVE"
     for _course_id in _course_ids:
+        _course_id = get_course_id(_course_id)
         _course_info = service_classroom.courses().get(id=_course_id).execute()
         _course_owner = _owner if _owner != "none" else _course_info.get(
             "owner")
@@ -390,7 +401,9 @@ def invite_users(class_id):
     _role = 'TEACHER' if options["teacherRole"] else 'STUDENT'
     multiple_args = []
     for user_id in enroll_users[class_id]:
-        _course_id = course_lists[class_id]
+        # _course_id = course_lists[class_id]
+        # Possibly not work properly(2021.04 add sira)
+        _course_id = get_course_id(class_id)
         _invite_user = user_emails[user_id]
         user = {
             "courseId": _course_id,
@@ -450,7 +463,9 @@ def create_users(class_id):
     """
     multiple_args = []
     for user_id in enroll_users[class_id]:
-        _course_id = course_lists[class_id]
+        # _course_id = course_lists[class_id]
+        # Possibly not work properly(2021.04 add sira)
+        _course_id = get_course_id(class_id)
         _enroll_user = user_emails[user_id]
         print('course_id={}, class_id={}, enrollUser={}'.format(
             _course_id, class_id, _enroll_user))
@@ -653,20 +668,34 @@ def info_classroom(_course_id):
     for teacher in teachers:
         _teacher_names += "/" + str(teacher["profile"]["name"]["fullName"])
     print("teacher : {}".format(_teacher_names))
-    if _owner_id != admin_id:
-        add_admin_user(_course_id)
-    print("Enrolled user lists...")
-    results = enrolled_students(_course_id)
-    if results:
-        for result in sorted(results):
-            print("{},{}".format(result[0], result[1]))
-    print("Inviting user lists...")
-    results = invited_students(_course_id)
-    if results:
-        for result in sorted(results):
-            print("{},{}".format(result[0], result[1]))
-    if _owner_id != admin_id:
-        delete_admin_user(_course_id)
+    if options["detail"]:
+        if _owner_id != admin_id:
+            add_admin_user(_course_id)
+        print("Enrolled user lists...")
+        results = enrolled_students(_course_id)
+        if results:
+            for result in sorted(results):
+                print("{},{}".format(result[0], result[1]))
+        print("Inviting user lists...")
+        results = invited_students(_course_id)
+        if results:
+            for result in sorted(results):
+                print("{},{}".format(result[0], result[1]))
+        if _owner_id != admin_id:
+            delete_admin_user(_course_id)
+
+
+def info_user(_user_id):
+    """info_user(_user_id)
+    """
+    _user_info = service_classroom.userProfiles().get(userId=_user_id).execute()
+    print("user_id  : {}".format(_user_info.get("id")))
+    print("name     : {}".format(_user_info.get("name").get("fullName")))
+    print("email    : {}".format(_user_info.get("emailAddress")))
+    print("perm.    : ", end="")
+    for _permission in _user_info.get("permissions"):
+        print(_permission.get("permission"), " ", end="")
+    print("")
 
 
 def enrolled_students(_course_id):
@@ -821,6 +850,15 @@ def crawl_classroom_proc(_course_id, _owner_id):
     _course_info = service[_course_id].courses().get(id=_course_id).execute()
     return [_course_id, total_enrolled, total_invited, _course_info.get("courseState")]
 
+ def get_course_id(_course_id=None):
+     """ get_course_id(_course_id=None)
+     """
+     if options.get("courseId", None):
+         _course_id = options["courseId"]
+     elif not _course_id:
+         return None
+     return course_lists.get(_course_id, _course_id)
+
 
 def get_classroom_stream():
     """get_classroom_stream()
@@ -943,17 +981,12 @@ if __name__ == "__main__":
 #            list_classroom(course_states="ACTIVE")
         sys.exit()
     elif exec_mode == "info":
-        course_id = options["courseId"]
-        # class_code_regex = '.*?([0-9]{5}[A-Z][0-9]{4})
-        class_code = re.match(class_code_regex, course_id)
-        if class_code:
-            class_code = class_code.group(1)
-            print(class_code)
-            if class_code in course_lists:
-                print("found")
-                course_id = course_lists[class_code]
+        course_id = get_course_id()
         print("course{} Information..".format(course_id))
         info_classroom(course_id)
+        sys.exit()
+    elif exec_mode == "user"
+        info_user(options["userId"])
         sys.exit()
     elif exec_mode == "crawl":
         crawl_classroom()
