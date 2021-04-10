@@ -850,14 +850,15 @@ def crawl_classroom_proc(_course_id, _owner_id):
     _course_info = service[_course_id].courses().get(id=_course_id).execute()
     return [_course_id, total_enrolled, total_invited, _course_info.get("courseState")]
 
- def get_course_id(_course_id=None):
-     """ get_course_id(_course_id=None)
-     """
-     if options.get("courseId", None):
-         _course_id = options["courseId"]
-     elif not _course_id:
-         return None
-     return course_lists.get(_course_id, _course_id)
+
+def get_course_id(_course_id=None):
+    """ get_course_id(_course_id=None)
+    """
+    if options.get("courseId", None):
+        _course_id = options["courseId"]
+    elif not _course_id:
+        return None
+        return course_lists.get(_course_id, _course_id)
 
 
 def get_classroom_stream():
@@ -985,7 +986,7 @@ if __name__ == "__main__":
         print("course{} Information..".format(course_id))
         info_classroom(course_id)
         sys.exit()
-    elif exec_mode == "user"
+    elif exec_mode == "user":
         info_user(options["userId"])
         sys.exit()
     elif exec_mode == "crawl":
