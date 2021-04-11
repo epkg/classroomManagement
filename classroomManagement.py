@@ -803,13 +803,13 @@ def crawl_classroom():
                     [
                         _class_code,
                         course_names[_class_code],
-                        class_sections[_class_code],
+                        result[3],
                         class_teachers[_class_code],
                         course_owners[_class_code],
                         int(result[1] + result[2]),
                         result[1],
                         result[2],
-                        result[3]
+                        result[4]
                     ]
                 )
 
@@ -848,7 +848,7 @@ def crawl_classroom_proc(_course_id, _owner_id):
         if not page_token:
             break
     _course_info = service[_course_id].courses().get(id=_course_id).execute()
-    return [_course_id, total_enrolled, total_invited, _course_info.get("courseState")]
+    return [_course_id, total_enrolled, total_invited, _course_info.get("section"), _course_info.get("courseState")]
 
 
 def get_course_id(_course_id=None):
