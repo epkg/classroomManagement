@@ -204,7 +204,9 @@ def read_data():
     # csv format:
     # class_code(Multiple Key), user id
     # if any(x in options for x in ("enroll", "unenroll", "create")):
-    if exec_mode in ("enroll", "unenroll", "create"):
+    # 2026.03 modifed
+    # "create" removed: enrollments.csv is not required in create mode
+    if exec_mode in ("enroll"):
         with open(_enroll_file, "r") as _f:
             for line in _f:
                 if line == "\n":
